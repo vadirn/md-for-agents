@@ -5,7 +5,7 @@
 //! and `end` points at the **last byte** of the node's last character. So the
 //! exclusive end is `line_start(end.line) + end.column` — no `char_boundary`
 //! walk, and NEVER `+ utf8_len(last_char)` (a char-count-mode habit that
-//! overshoots 1–3 bytes on any multibyte-terminal block). Decision 14.
+//! overshoots 1–3 bytes on any multibyte-terminal block).
 
 use comrak::nodes::Sourcepos;
 

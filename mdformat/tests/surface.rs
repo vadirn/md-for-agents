@@ -1,7 +1,7 @@
 //! CLI-level coverage for the surface itself: which verbs exist, what `--rule`
 //! selects, and what gets reported without being asked.
 //!
-//! `tests/write.rs` drives the same binary for the one verb-flag that opens a
+//! The write tests drive the same binary for the one verb-flag that opens a
 //! file; this file drives everything that only reads. Both go through the
 //! compiled binary rather than the library, because a surface is not a function
 //! — it is what an invocation is accepted or refused for, and what a person
@@ -318,7 +318,7 @@ fn exemptions_are_reported_without_being_asked() {
 }
 
 /// A whole-document declination is reported unasked as well, and sets no exit
-/// code. The specimen is the one `tests/normalize.rs` pins: deleting the head
+/// code. The specimen is the one the gap tests pins: deleting the head
 /// whitespace would promote the leading `---` into front matter, so the gap
 /// rule's structure guard refuses the rewrite and the rule yields its input.
 #[test]

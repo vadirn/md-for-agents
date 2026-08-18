@@ -1,7 +1,7 @@
 //! Walk comrak's AST into a [`Document`]: separate frontmatter / headings /
 //! non-heading blocks at the top level, synthesize the heading tree +
 //! `sectionSpan` (comrak gap #3), decompose wikilinks (gap #4), flag `![[…]]`
-//! embeds via a pre-pass (Decision 16), and scan opt-in regions (Decision 12).
+//! embeds via a pre-pass, and scan opt-in regions.
 
 use comrak::nodes::{AstNode, ListType, NodeValue};
 use comrak::{Arena, parse_document};
@@ -12,7 +12,7 @@ use super::region;
 use super::span::LineIndex;
 use super::wikilink;
 
-/// Parse options mirrored onto comrak (Decision 13: wikilinks default on).
+/// Parse options mirrored onto comrak (wikilinks default on).
 pub struct Options {
     pub wikilinks: bool,
 }
@@ -126,7 +126,7 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
                     end_line: Some(sp.end.line as u32),
                     // Body starts the line after the closing delimiter:
                     // bodyStartByte == line_start(bodyStartLine), slice begins
-                    // on content (reverses Decision 22, which pointed at
+                    // on content (reverses the earlier choice, which pointed at
                     // comrak's block end — the closing delimiter's newline).
                     body_start_byte: idx.line_start(sp.end.line + 1),
                     body_start_line: (sp.end.line + 1) as u32,
@@ -660,7 +660,7 @@ fn collect_inlines<'a>(
         // GFM table cells: comrak's inline sourcepos there is unreliable
         // (escaped-pipe cells shift offsets — R2). Non-wikilink inlines
         // (links, code spans, images, footnote refs) stay suppressed inside
-        // cells (Decision 19; consumers re-slice raw cell bytes). Wikilinks and
+        // cells (consumers re-slice raw cell bytes). Wikilinks and
         // embeds ARE emitted (1.1): the consumer reads their decoded
         // `target`/`alias`, not the imprecise span, so table-cell backlinks are
         // not lost. Emphasis IS emitted too (1.3) on a weaker warrant: the

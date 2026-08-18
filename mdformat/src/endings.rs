@@ -32,7 +32,7 @@
 //! carriage return and a following newline." There is no other role a `\r` can
 //! play — not inside a code block, not inside a code span, not inside front
 //! matter. [`crate::LineIndex`] already reads the source that way, and
-//! `tests/partition.rs::lone_cr_is_a_line_ending_for_comrak_too` pins that comrak
+//! `lone_cr_is_a_line_ending_for_comrak_too` pins that comrak
 //! agrees against a real parse.
 //!
 //! So this rule reads no parse. It does not need one: there is no document in
@@ -48,8 +48,8 @@
 //! **The oracle as it stands refuses this rewrite.** Measured, not assumed:
 //! comrak stores line endings **verbatim** inside a `CodeBlock`, `HtmlBlock` and
 //! `FrontMatter` literal, and `format_html` prints them, so `rich` and `html`
-//! both differ for any CRLF document holding one — `tests/endings.rs::
-//! the_structure_oracle_refuses_this_rewrite` names the specimens. Gating on it
+//! both differ for any CRLF document holding one —
+//! `the_structure_oracle_refuses_this_rewrite` names the specimens. Gating on it
 //! would decline nearly every real CRLF file; the gap rule would then rewrite
 //! those files' gaps to LF anyway, and the output would be mixed. That is the
 //! defect this module exists to remove, reintroduced by its own guard.
@@ -73,7 +73,7 @@
 //! document. This rewrite's effect does not depend on the document at all, so
 //! there is nothing for a witness to read.
 //!
-//! What replaces the guard is a measurement, in `tests/endings.rs`: over CRLF
+//! What replaces the guard is a measurement, in the endings tests: over CRLF
 //! specimens covering every block shape the crate knows, the block skeleton and
 //! every table's source shape survive **identically**, and the rendered HTML
 //! survives identically once the `\r`s are read out of it the way an HTML parser

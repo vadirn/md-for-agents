@@ -1,4 +1,4 @@
-//! The intrinsic freeze gate over the mandatory fixtures (Decision 17 clause E),
+//! The intrinsic freeze gate over the mandatory fixtures,
 //! plus golden interior-span assertions that tiling and inline fidelity cannot
 //! see. Fixtures are embedded byte literals (not on-disk .md) so a markdown
 //! formatter cannot mangle CRLF/BOM/closing-hash bytes.

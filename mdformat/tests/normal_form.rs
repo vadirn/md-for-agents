@@ -3,7 +3,7 @@
 //!
 //! # Why this file exists
 //!
-//! `format.rs` derives its predicate from its rules: a document is normal for a
+//! the formatter derives its predicate from its rules: a document is normal for a
 //! rule exactly when the rule's own yield for it is the document unchanged.
 //! That is the right choice — a hand-written predicate would reimplement
 //! `content_spans` and would have to reproduce every declination by hand — but
@@ -20,8 +20,8 @@
 //!
 //! So the standard of correctness has to come from outside the tool, and this
 //! file is it. Every `expected` below was written by hand from the rule's
-//! stated normal form — the tables in `normalize.rs` and `table.rs`, the two
-//! clauses in `markers.rs` — and never
+//! stated normal form — the gap and table rules' stated tables, the two
+//! clauses of the marker rule — and never
 //! by running the formatter and pasting its output, which would only relocate
 //! the vacuity. An expected output a person wrote is the one artifact here that
 //! can say *the tool did nothing and should have*.
@@ -34,7 +34,7 @@
 //!
 //! # How this file proves it can go red
 //!
-//! `negative_controls.rs` is the model: asserted failures beside passing causal
+//! The negative-control suite is the model: asserted failures beside passing causal
 //! controls. The section at the foot does the same for this suite —
 //! [`the_identity_formatter_fails_this_suite`] names the fixtures a do-nothing
 //! formatter loses, and each `..._is_not_the_normal_form` test pins a plausible
@@ -79,7 +79,7 @@
 //! ([`every_expectation_is_a_fixpoint`], [`formatting_twice_changes_nothing`]).
 //!
 //! Commutativity of the rules is deliberately **not** asserted anywhere: it is
-//! a corpus-contingent observation, and `format.rs` fixes the pipeline order at
+//! a corpus-contingent observation, and the formatter fixes the pipeline order at
 //! endings → gaps → tables → markers on purpose. The endings rule's
 //! place at the head is key rather than contingent — it is what keeps
 //! a carriage return out of the other rules' inputs.
@@ -99,11 +99,11 @@
 //! its corrective clause has one live specimen in the corpus, and its
 //! **declinations have none**: no measured file holds a mixed adjacent pair, and
 //! none holds the nested `+ + +` whose unified form is a thematic break. Both
-//! are exercised by this file and by `tests/markers.rs` and nowhere else.
+//! are exercised by this file and by the marker tests and nowhere else.
 //!
 //! **Line endings are the extreme case**: 0 of those 1244 files hold a carriage
 //! return, so the entire endings rule — every clause of it — is exercised by
-//! this file and by `tests/endings.rs` and nowhere else. That is also why its
+//! this file and by the endings tests and nowhere else. That is also why its
 //! fixtures had to be *rewritten* rather than added. Two of them predate the
 //! rule and pinned the shape it removed: the gap rule stated its separators as
 //! LF literals, so it rewrote the endings it could reach and left the ones
@@ -113,7 +113,7 @@
 //! withdrawn form is now an asserted failure, in
 //! [`preserving_a_span_interior_crlf_is_not_the_normal_form`].
 //!
-//! Every specimen is an embedded byte literal, for the reason `table.rs`'s
+//! Every specimen is an embedded byte literal, for the reason the table tests'
 //! fixtures are: these shapes are *made of whitespace*, and a specimen on disk
 //! is one formatting pass away from no longer being the specimen.
 
@@ -138,7 +138,7 @@ struct Fixture {
     name: &'static str,
     /// The clause of the stated normal form this fixture reads off, quoted
     /// closely enough that a reader can check the expectation against the
-    /// module docs of `normalize.rs`, `table.rs` or `markers.rs` without
+    /// module docs of the gap, table or marker rules without
     /// running anything.
     clause: &'static str,
     input: &'static [u8],
@@ -306,7 +306,7 @@ const FIXTURES: &[Fixture] = &[
     Fixture {
         // The other row of the endings table. A lone `\r` is a CommonMark line
         // ending too — comrak agrees, which
-        // `partition.rs::lone_cr_is_a_line_ending_for_comrak_too` pins against a
+        // `lone_cr_is_a_line_ending_for_comrak_too` pins against a
         // real parse — so these three lines are a paragraph, a heading and a
         // paragraph, and the gap rule puts one blank line between each pair.
         name: "endings: a lone CR is a line ending and becomes LF",
@@ -316,12 +316,12 @@ const FIXTURES: &[Fixture] = &[
     },
     Fixture {
         // The key case of span interior: the bytes between the fences
-        // are a code block's *literal*, which `structure.rs` deliberately
+        // are a code block's *literal*, which the structure oracle deliberately
         // refuses to trim because they are content. The endings rule rewrites
         // them regardless — a line ending inside a code block is still a line
         // ending — and this is exactly the shape whose `rich` and `html`
         // signatures the structure oracle reports as changed, which is why that
-        // oracle does not gate this rule. See `tests/endings.rs`.
+        // oracle does not gate this rule. See the endings tests.
         name: "endings: a CRLF inside a fenced code block becomes LF",
         clause: "\"\\r\\n\" -> \"\\n\", every line ending, code-block literals included",
         input: b"# H\r\n\r\n```\r\ncode\r\n```\r\n",
@@ -730,14 +730,14 @@ fn the_declining_fixtures_actually_decline() {
 // ---------------------------------------------------------------------------
 // Proving the suite can go red
 //
-// `negative_controls.rs` holds asserted failures beside passing causal
+// the negative-control suite holds asserted failures beside passing causal
 // controls, for the reason this section exists: a green suite means nothing
 // until someone has shown what turns it red. Every test below states a
 // formatter that would fail, or a normal form the real one must not produce.
 // ---------------------------------------------------------------------------
 
 /// A formatter that does nothing — the one that satisfies every internal
-/// property in `format.rs` and is nonetheless wrong.
+/// property in the formatter and is nonetheless wrong.
 fn identity(source: &str) -> String {
     source.to_string()
 }

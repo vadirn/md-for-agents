@@ -79,7 +79,7 @@ fn shared_options_enable_documented_extensions() {
 /// inline link, a list — parses into spans that partition its content bytes.
 /// That partition is the whole verdict: reassembly equality used to be asserted
 /// alongside it here, and was dropped because it is satisfied by corrupt span
-/// sets too. `tests/partition.rs` holds the injection that proves it.
+/// sets too. the partition fixtures holds the injection that proves it.
 #[test]
 fn spans_partition_a_realistic_document() {
     let src = "---\ntitle: x\n---\n# Heading\n\nSome *text* with a [[Wikilink]] and a [link](https://x.io).\n\n- one\n- two\n";

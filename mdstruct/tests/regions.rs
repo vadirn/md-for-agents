@@ -1,5 +1,5 @@
 //! End-to-end coverage for the always-on masked region scanner (plan Phase A).
-//! The `region.rs` unit tests drive `scan()` with a hand-built mask; these drive
+//! The region scanner's unit tests drive `scan()` with a hand-built mask; these drive
 //! the whole `parse()` path so build.rs's mask construction (fenced-or-indented
 //! code-block spans + inline `NodeValue::Code` spans) is exercised for real —
 //! the layer the unit tests bypass. Scope: inline recognition,

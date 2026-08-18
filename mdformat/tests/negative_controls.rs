@@ -1,26 +1,26 @@
 //! Specimens the partition oracle must **reject**.
 //!
-//! `partition.rs` asserts the oracle passes on everything the corpus holds. That
+//! The partition fixtures assert the oracle passes on everything the corpus holds. That
 //! is only half a contract: an oracle that never fails passes those tests too,
 //! so a regression that silently disabled checking would read as green. These
 //! two specimens pin the failure path against a *real* parser defect rather
 //! than an injected one, which is what
-//! `partition.rs::shortening_every_span_by_one_byte_fails_the_partition`
+//! `shortening_every_span_by_one_byte_fails_the_partition`
 //! already covers.
 //!
-//! Both also demonstrate the trap `print.rs`'s module docs describe: the
+//! Both also demonstrate the trap the printer's module docs describe: the
 //! printer's output still equals its input, byte for byte, while content sits
 //! in no span at all. Reassembly equality is satisfied by exactly the span
 //! sets the oracle exists to refuse.
 //!
-//! Each specimen is an embedded byte literal, for the same reason the
-//! `partition.rs` fixtures are: a specimen on disk is one formatting pass
+//! Each specimen is an embedded byte literal, for the same reason
+//! the partition fixtures are: a specimen on disk is one formatting pass
 //! away from being rewritten into something that no longer reproduces the
 //! defect.
 //!
 //! # Neither is dead weight
 //!
-//! Both shapes are documented in `print.rs` as the residual holes its two
+//! Both shapes are documented in the printer as the residual holes its two
 //! workarounds leave open, and neither workaround can be widened without
 //! widening the tolerance the oracle exists to withhold. Landing them as
 //! *asserted* failures fixes the boundary: the day either shape starts
@@ -156,7 +156,7 @@ fn the_same_list_at_eof_passes_isolating_the_trailing_block_as_the_cause() {
 ///
 /// The fill stays narrow on purpose: every line it claims is a line the oracle
 /// stops checking, and a continuation rule would have to guess how far a
-/// definition runs. Corpus exposure is zero (see `print.rs`), so this specimen
+/// definition runs. Corpus exposure is zero (see the printer), so this specimen
 /// records the cost of that choice rather than arguing against it.
 #[test]
 fn a_link_reference_definition_with_a_continued_destination_loses_its_destination() {

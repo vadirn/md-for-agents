@@ -76,8 +76,8 @@
 //! Only a column on a line **after the table's opening line** is corrected. The
 //! opening line's columns are the anchor's own line, where the header's offset
 //! really does sit — including a byte order mark's three bytes, which comrak
-//! counts there correctly. `tests/table.rs::
-//! a_byte_order_mark_shifts_only_line_one_columns_inside_a_table` holds that
+//! counts there correctly.
+//! `a_byte_order_mark_shifts_only_line_one_columns_inside_a_table` holds that
 //! boundary against a real parse in both directions.
 //!
 //! # Why this lives at the parse seam

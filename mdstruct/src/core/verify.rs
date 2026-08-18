@@ -1,4 +1,4 @@
-//! The intrinsic, consumer-neutral freeze gate (Decision 11/15/17):
+//! The intrinsic, consumer-neutral freeze gate:
 //!
 //! 1. **Total tiling** — the structural partition (frontmatter + every heading +
 //!    every top-level node) is disjoint and non-overlapping, and every inter-span
@@ -83,7 +83,7 @@ fn verify_no_unknown(nodes: &[Node]) -> Result<(), SpanMismatch> {
     Ok(())
 }
 
-/// Whitespace-gap total tiling (Decision 15).
+/// Whitespace-gap total tiling.
 fn verify_tiling(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
     let mut spans: Vec<Span> = Vec::new();
     if let Some(fm) = doc.frontmatter()
@@ -185,13 +185,13 @@ fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
         let sp = inl.span();
         let s = slice(source, sp)?;
         // Table-cell wikilinks/embeds (1.1) and emphasis (1.3): comrak's inline
-        // sourcepos shifts on escaped-pipe cells (Decision 19), so the span is
+        // sourcepos shifts on escaped-pipe cells, so the span is
         // imprecise and fails the `]]` / `*…*` shape check. A wikilink consumer
         // reads the decoded `target`/`alias` instead of the span; an emphasis
         // consumer only asks whether emphasis is present, which an imprecise
         // span still answers. Both are emitted, so both are exempt from the
         // shape + sub-span-nesting oracle here. The boundary slice above still
-        // holds (the span is a valid on-char slice), and Decision 19 stays in
+        // holds (the span is a valid on-char slice), and that exemption stays in
         // force for every other table-cell inline (those are not emitted).
         if matches!(
             inl,
@@ -302,7 +302,7 @@ fn verify_nodes(nodes: &[Node], source: &str) -> Result<(), SpanMismatch> {
     Ok(())
 }
 
-/// Opt-in region-slice check (Decision 17).
+/// Opt-in region-slice check.
 fn verify_regions(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
     for r in &doc.regions {
         let whole = slice(source, r.span)?;

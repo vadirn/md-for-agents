@@ -45,8 +45,8 @@
 //!
 //! The **zero declined constructs** is the key half, because it
 //! says the declination path has no corpus exposure at all. Every clause of it
-//! is exercised by this module's tests, `tests/markers.rs` and
-//! `tests/normal_form.rs`, and nowhere else.
+//! is exercised by this module's tests, the marker tests and
+//! the hand-written fixture suite, and nowhere else.
 //!
 //! # The structural hazard, and the construct this declines
 //!
@@ -103,7 +103,7 @@
 //!    that settled on `*` instead of `-` passes it with nothing to report. This
 //!    oracle states a **direction**, not a set of characters, and it is the
 //!    only thing between this rule and a silently reversed normal form.
-//!    `tests/markers.rs::only_the_substitution_oracle_can_see_which_marker_was_chosen`
+//!    `only_the_substitution_oracle_can_see_which_marker_was_chosen`
 //!    is that measurement.
 //!
 //!    What it cannot decide on its own is whether a changed byte was a list
@@ -115,7 +115,7 @@
 //! every candidate marker produces the same parse and the same render, so both
 //! all the oracles can do is hold the crate to whichever choice was made. That
 //! choice
-//! is settled by the census above, and `tests/normal_form.rs` pins it in
+//! is settled by the census above, and the hand-written fixture suite pins it in
 //! hand-written bytes.
 
 use comrak::nodes::{AstNode, ListDelimType, ListType, NodeList, NodeValue};

@@ -2,7 +2,7 @@
 //! partition oracle.
 //!
 //! Every fixture is an embedded byte literal, never an on-disk `.md` file:
-//! `mdstruct/tests/roundtrip.rs` set that precedent because a fixture on disk
+//! the roundtrip tests set that precedent because a fixture on disk
 //! is one formatting pass away from being silently rewritten — and a printer
 //! whose fixtures get reformatted tests nothing. Byte literals also let CRLF,
 //! a lone `\r`, and a BOM appear exactly as bytes.
@@ -14,8 +14,8 @@
 //! below; the corpus run cannot exercise them, so only a fixture can.
 //!
 //! Everything here is a specimen the oracle must **accept**. The specimens it
-//! must **reject** live in `negative_controls.rs`, which pins the two shapes
-//! `print.rs`'s workarounds leave open.
+//! must **reject** live in the negative-control suite, which pins the two shapes
+//! the printer's workarounds leave open.
 //!
 //! The three tests that matter most are the ones a naive
 //! implementation would *pass*:
@@ -257,7 +257,7 @@ const FIXTURES: &[(&str, &str)] = &[
     ("indented-code", "para\n\n    indented code\n\nafter\n"),
     // An indented code block in the LAST list item, with the list at EOF.
     // Passes, and is the causal control for the negative control of the same
-    // shape in `negative_controls.rs`: put a top-level block after the list
+    // shape in the negative-control suite: put a top-level block after the list
     // and comrak loses the code block's range entirely.
     (
         "indented-code-in-last-item-at-eof",

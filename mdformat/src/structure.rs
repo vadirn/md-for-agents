@@ -36,7 +36,7 @@
 //!   "The marker signature" below.
 //!
 //! **kinds alone is not enough**, and that is demonstrated rather than assumed:
-//! `tests/normalize.rs::kinds_and_html_agree_where_the_rich_signature_does_not`
+//! `kinds_and_html_agree_where_the_rich_signature_does_not`
 //! holds a pair of documents whose kinds *and* HTML are equal while their
 //! `marker_offset` differs. Conversely the walk skips inline subtrees entirely,
 //! so `html` is what covers text: a link reference definition that comrak
@@ -67,7 +67,7 @@
 //! the row's trailing pipe for the short row, and drops a long row's excess
 //! cells from the tree while leaving their bytes on the line. So a rewrite that
 //! gains or loses a cell on a ragged row passes **kinds, rich and html
-//! together**. `tests/table_negative_controls.rs` holds that blindness open as
+//! together**. the table negative controls holds that blindness open as
 //! an assertion, in `the_tree_signatures_are_jointly_blind_to_a_synthesized_cell`.
 //!
 //! [`Structure::tables`] closes it by reading the source lines a table occupies:
@@ -107,7 +107,7 @@
 //! the hazard that rule actually has: in CommonMark a change of bullet
 //! character **starts a new list**, so unifying `- a` / `+ b` splices two lists
 //! into one and the walk emits one fewer `list` entry.
-//! `tests/markers.rs::the_structure_oracle_rejects_the_merge_the_declination_prevents`
+//! `the_structure_oracle_rejects_the_merge_the_declination_prevents`
 //! feeds the merged bytes past this oracle and asserts the rejection, rather
 //! than assuming it — the rule declines that pair, so those bytes never reach
 //! the oracle in normal operation and an unexercised guard is worth nothing.

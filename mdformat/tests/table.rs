@@ -2,7 +2,7 @@
 //! that decide its open questions.
 //!
 //! Every fixture is an embedded byte literal, for the same reason
-//! `negative_controls.rs`'s are: a specimen on disk is one formatting pass
+//! the negative-control suite's are: a specimen on disk is one formatting pass
 //! away from being rewritten into something that no longer reproduces the shape
 //! under test — and the shapes here are *made of whitespace*, so that risk is at
 //! its worst.
@@ -497,7 +497,7 @@ fn the_cell_oracle_catches_what_the_line_check_cannot() {
 /// because the rewrite is faithful — the reading this test pins — or they are
 /// silent because they are wired to something that cannot move, which is the
 /// vacuous-guard failure this crate has shipped three times. The refutation of
-/// the second reading lives in `table_negative_controls.rs`, which hands the
+/// the second reading lives in the table negative controls, which hands the
 /// same oracles hand-built wrong padders and gets a refusal every time. So the
 /// guards can fail; nothing here makes them.
 ///

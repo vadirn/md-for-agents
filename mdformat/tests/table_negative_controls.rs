@@ -1,13 +1,13 @@
 //! Deliberately wrong padders the structural oracle must **reject**.
 //!
-//! `tests/table.rs` asserts the real padder's output is structurally equivalent
+//! The table tests assert the real padder's output is structurally equivalent
 //! to its input. That is only half a contract: an oracle that never fails passes
 //! those tests too. These specimens pin the failure path, and each one is a
 //! padder someone could plausibly write — not an arbitrary corruption.
 //!
 //! # Why these three, and not others
 //!
-//! A census of table padding found `src/structure.rs` too permissive in exactly
+//! A census of table padding found the structure oracle too permissive in exactly
 //! three places, and this file is the assertion that each is now closed:
 //!
 //! 1. a change to a **cell's content**, as opposed to the spaces around it,
@@ -20,7 +20,7 @@
 //! blind* — and for the ragged row they are — that blindness is asserted too,
 //! so the reason the fourth signature exists cannot quietly stop being true.
 //!
-//! Fixtures are embedded byte literals, per `negative_controls.rs`.
+//! Fixtures are embedded byte literals, per the negative-control suite.
 
 use mdformat::{Structure, pad, structure_of};
 
@@ -105,7 +105,7 @@ fn a_padder_that_synthesizes_a_cell_on_a_short_row_is_rejected() {
 
 /// The same blindness, stated as its own claim so it fails on its own terms if
 /// a comrak release ever starts modelling raggedness. This is the test
-/// `src/structure.rs` names as the evidence for its fourth signature.
+/// the structure oracle names as the evidence for its fourth signature.
 #[test]
 fn the_tree_signatures_are_jointly_blind_to_a_synthesized_cell() {
     let short = utf8(b"| a | b | c |\n| --- | --- | --- |\n| 1 | 2 |\n");

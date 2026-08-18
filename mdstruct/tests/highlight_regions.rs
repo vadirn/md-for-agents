@@ -1,7 +1,7 @@
 //! Synthetic `highlight_<uid>` fixtures — plan Phase C's pre-producer validation
 //! (Q3). `highlight` itself is not built; these exist purely to validate the
 //! region engine's inline byte-offset extraction against a second consumer
-//! shape before any real producer exists. `tests/regions.rs` (step 5) already
+//! shape before any real producer exists. the region tests (step 5) already
 //! covers single-label inline recognition, inline-code/fence inertness,
 //! single-pair cross-block pairing, whole-line S7 parity, and the no-flag
 //! always-on contract — this file's net-new scope is strictly multi-region

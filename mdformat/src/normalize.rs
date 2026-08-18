@@ -124,7 +124,7 @@
 //! `None` unless the input partitioned and the re-parse is structurally
 //! equivalent. The partition oracle cannot serve here — it passed on 167 of 167
 //! synthetic documents this rewrite destroyed — and the shapes it misses are
-//! live: `tests/normalize.rs` pins a leading `---` promoted into front matter
+//! live: the gap tests pins a leading `---` promoted into front matter
 //! and a link reference definition deleted from the render, both of which
 //! partition cleanly and both of which this refuses.
 

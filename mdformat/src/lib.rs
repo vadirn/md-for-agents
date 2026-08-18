@@ -218,7 +218,7 @@ impl Partition {
     /// believe the verdict is doubly grounded when it rests entirely on
     /// [`PartitionReport::is_partition`]. [`print`] argues this at length;
     /// `print::reassemble_is_boundary_insensitive_by_construction` and
-    /// `tests/partition.rs::reassembly_alone_misses_what_the_partition_catches`
+    /// `reassembly_alone_misses_what_the_partition_catches`
     /// pin it, and are what anyone restoring the conjunct has to delete first.
     pub fn passed(&self) -> bool {
         self.report.is_partition()

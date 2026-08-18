@@ -11,8 +11,8 @@
 //! **This verb was called `fixpoint` until this commit.** The word was already
 //! taken, and by something more central: `fixpoint` is one of the two clauses
 //! of [`mdformat::format`]'s contract — `format(f) == f` for every `f` already
-//! normal — asserted under that name across `tests/normal_form.rs`,
-//! `tests/endings.rs` and `tests/table.rs`. A verb meaning "the block spans
+//! normal — asserted under that name across the hand-written fixture suite,
+//! the endings tests and the table tests. A verb meaning "the block spans
 //! partition the content bytes" had no claim on it. The verb now takes the
 //! name every string it prints already uses.
 //!
@@ -36,7 +36,7 @@
 //! disagreement, not the safeguard.
 //!
 //! **The corpus figures the module docs quote were measured with those verbs**,
-//! last present at commit `333ac55`. The space and byte deltas in
+//! which no longer exist. The space and byte deltas in
 //! [`mdformat::table`], the gap and blank-line-site counts in
 //! [`mdformat::normalize`], and the front-matter clause withdrawn there for
 //! costing 988 of 1052 files all come from batch runs of `mdformat normalize`

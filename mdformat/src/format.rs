@@ -52,7 +52,7 @@
 //! The cost's *other* half is sharper, and nothing in this module can pay it:
 //! substitute the derived predicate into both clauses and `format = identity`
 //! satisfies them — every document normal, zero departures, green. So the
-//! standard of correctness comes from outside. `tests/normal_form.rs` holds
+//! standard of correctness comes from outside. the hand-written fixture suite holds
 //! ill-formed inputs paired with **hand-written** expected bytes, one per rule
 //! clause, asserted byte for byte; mutating `format` to return its input fails
 //! 37 of its 43 fixtures while leaving both of its idempotence tests green,
@@ -779,7 +779,7 @@ mod tests {
 
     #[test]
     fn a_declined_document_yields_its_input_and_reports_no_departure() {
-        // `tests/normalize.rs` pins this one: deleting the head whitespace
+        // the gap tests pins this one: deleting the head whitespace
         // promotes the leading `---` into front matter, so the structure guard
         // refuses the rewrite. The rule then yields its input, which is what
         // makes the document normal — the exemption is the declination, read

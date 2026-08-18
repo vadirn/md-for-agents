@@ -1,4 +1,4 @@
-//! The comment-anchor overlay scanner (Decision 12). Always-on and complete:
+//! The comment-anchor overlay scanner. Always-on and complete:
 //! every recognised `<!-- <label>[: <info>] -->` … `<!-- /<label> -->` pair is
 //! emitted into `regions[]`; consumers filter by label. A region references a
 //! span WITHOUT disturbing structure (the interior is still parsed into
@@ -23,7 +23,7 @@
 //! continuation line of a multi-line HTML comment — is now handled by the
 //! multi-line HTML-comment mask (build.rs).
 //!
-//! Span convention — pinned per endpoint, not per pair (Decision 17):
+//! Span convention — pinned per endpoint, not per pair:
 //!   `span.start`/`body_span.start` follow the OPEN's class;
 //!   `span.end`/`body_span.end` follow the CLOSE's class.
 //!   - whole-line endpoint (an anchor that is the entire trimmed line): the

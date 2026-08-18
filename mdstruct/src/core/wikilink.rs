@@ -3,7 +3,7 @@
 //! PKM-flavored — those fields come out `None` for sources that don't use them.
 //! Embed (`![[…]]`) is NOT recoverable here: comrak emits no WikiLink for it
 //! (the `!` opens an image, swallowing the inner `[[`), so a core pre-pass sets
-//! `embed` (Decision 16); this module never sees embeds.
+//! `embed`; this module never sees embeds.
 
 /// The `{page, heading, block}` decomposition of a wikilink target.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -4,7 +4,7 @@
 //!
 //! [`reassemble`] emits, in source order, the original bytes of every
 //! top-level block span plus the bytes between spans. It normalizes nothing,
-//! because it never asks comrak to render: comrak's own printer (`cm.rs`)
+//! because it never asks comrak to render: comrak's own printer
 //! reads `sourcepos` in zero places, so a sourcepos-driven passthrough
 //! inherits none of comrak's rewrites. Constructs the parser does not model —
 //! footnote definitions (`extension.footnote` is deliberately off), `$…$` and
@@ -19,7 +19,7 @@
 //! any boundary error, so `reassemble(src, blocks) == src` holds for a span
 //! set shortened by one byte per block just as it does for the true one. An
 //! earlier scan of this corpus made exactly that mistake and had to discard the
-//! result. `tests/partition.rs::reassembly_alone_misses_what_the_partition_catches`
+//! result. `reassembly_alone_misses_what_the_partition_catches`
 //! keeps the trap documented as a live assertion.
 //!
 //! [`crate::Partition`] therefore does not compute the comparison at all. It
@@ -66,7 +66,7 @@
 //! list item and follow the list with a top-level block, and comrak reports
 //! that code block as an empty range too — no correct end is left to borrow,
 //! and the union recovers nothing.
-//! `tests/negative_controls.rs::an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered`
+//! `an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered`
 //! holds that shape open as an asserted failure, with the same list at EOF as
 //! its passing control. Corpus exposure is zero: comrak finds 8 indented code
 //! blocks across the 1052-file corpus, spread over two files, and every one
@@ -239,7 +239,7 @@ pub fn block_spans<'a>(root: &'a AstNode<'a>, source: &str) -> Result<Vec<Block>
 /// A definition whose destination sits on a following line leaves that line
 /// unclaimed and the file failing. Corpus exposure is zero, and inventing a
 /// continuation rule would widen exactly the tolerance this keeps narrow.
-/// `tests/negative_controls.rs::a_link_reference_definition_with_a_continued_destination_loses_its_destination`
+/// `a_link_reference_definition_with_a_continued_destination_loses_its_destination`
 /// asserts that failure rather than leaving it as a comment, so widening the
 /// fill has to break a test first.
 fn fill_dropped_link_reference_definitions(source: &str, idx: &LineIndex, blocks: &mut Vec<Block>) {

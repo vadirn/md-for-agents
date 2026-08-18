@@ -82,7 +82,7 @@ pub struct Source {
     pub sha256: String,
 }
 
-/// Block span + format tag only; the body is NOT parsed (Decision 4).
+/// Block span + format tag only; the body is NOT parsed.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FrontMatter {
@@ -261,7 +261,7 @@ pub enum Inline {
         /// Decoded link target: comrak's `WikiLink.url` (or, for an embed, the
         /// pre-pipe raw inner). The RELIABLE string a consumer reads instead of
         /// slicing `span`, whose bytes shift inside escaped-pipe table cells
-        /// (Decision 19). (Schema 1.1.)
+        ///. (Schema 1.1.)
         target: String,
         page: String,
         heading: Option<String>,

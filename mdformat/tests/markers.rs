@@ -1,7 +1,7 @@
 //! The list-marker rule's guards, held open against deliberately wrong
 //! unifiers.
 //!
-//! `src/markers.rs` asserts what the real unifier produces. That is half a
+//! The marker rule's own tests assert what the real unifier produces. That is half a
 //! contract: a guard that never fails passes those tests too, and this crate
 //! has shipped three guards that turned out to pass everything they were
 //! supposed to catch — reassembly equality, the unary partition oracle, and a
@@ -35,7 +35,7 @@
 //! `declined`) rather than on `correct`'s output, and each states in its own
 //! docs the mutation that was run to show it can go red.
 //!
-//! Fixtures are embedded byte literals, per `negative_controls.rs`.
+//! Fixtures are embedded byte literals, per the negative-control suite.
 
 use mdformat::{
     ListSkipReason, MarkerViolation, RuleRun, Structure, check, marker_violation, structure_of,
@@ -93,7 +93,7 @@ fn correct(source: &str) -> String {
 ///
 /// Measured, not argued. Recording the exemption for top-level pairs only —
 /// which leaves every byte in the crate where it was — turns this test and one
-/// `src/markers.rs` unit test red and nothing else; 181 of 183 still pass.
+/// marker-rule unit test red and nothing else; 181 of 183 still pass.
 /// Making the exemption name its own list instead of its neighbour's turns
 /// **only** this test red, which is the assertion no counting test can make.
 fn assert_the_pair_is_reported_exempt(source: &str) {
@@ -358,7 +358,7 @@ fn only_the_substitution_oracle_can_see_which_marker_was_chosen() {
 /// ordered item's ordinal as its own `start`, so a renumbering shows up in
 /// `rich` as well as in the changed digit. Asserted on both sides so that a
 /// future normalization of `start` — the kind of quiet widening
-/// `src/structure.rs` warns about — cannot leave this defect uncovered.
+/// the structure oracle warns about — cannot leave this defect uncovered.
 #[test]
 fn a_unifier_that_also_renumbers_is_rejected_by_both_guards() {
     let src = utf8(b"1) a\n1) b\n");
@@ -437,7 +437,7 @@ fn unification_is_idempotent() {
 /// coming back unchanged is consistent with two different rules: one that read
 /// the markers and found them already right, and one that declined the list and
 /// never looked. The suite had a single already-normal marker specimen before
-/// this, in `normal_form.rs`, and it separates those two readings for one
+/// this, in the hand-written fixture suite, and it separates those two readings for one
 /// document out of the whole rule.
 ///
 /// The specimens cover every position the rule reaches: top level, nested,

@@ -2,7 +2,7 @@
 //!
 //! Every other rewrite in this crate is gated by [`mdformat::structure_of`]:
 //! rewrite, re-parse, and refuse unless the two parses match on kinds, node
-//! attributes, rendered HTML and table source shape. `endings.rs` carries no
+//! attributes, rendered HTML and table source shape. the endings tests carries no
 //! such gate, and its module docs argue why — the structure oracle **refuses**
 //! this rewrite, and an oracle blind to the bytes it changes could never fail.
 //! Both halves of that argument are asserted here rather than believed, because
@@ -30,7 +30,7 @@
 //! since an untouched document and an unexamined one are the same bytes. See
 //! [`an_lf_clean_document_is_already_normal_for_this_rule`].
 //!
-//! Specimens are byte literals for the reason `normal_form.rs`'s are: a
+//! Specimens are byte literals for the reason the hand-written fixture suite's are: a
 //! carriage return is one editor pass away from not being there. The corpus
 //! cannot supply any of this — 0 of the corpus's 1244 files hold a `\r`.
 

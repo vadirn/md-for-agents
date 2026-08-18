@@ -82,7 +82,7 @@
 //! nor the header-width delimiter reaches it.
 //!
 //! So the exemption trades 88% of the added whitespace for near-total
-//! disagreement with the corpus's existing hand padding. `tests/table.rs` pins
+//! disagreement with the corpus's existing hand padding. the table tests pins
 //! that trade at both ends — `a_hand_padded_trailing_column_loses_its_padding`
 //! for the cost, `the_corpus_alignment_specimen_is_reproduced_byte_for_byte`
 //! for the survivor — rather than leaving either to a dry run, and
@@ -110,7 +110,7 @@
 //! need inline sourcepos, which comrak shifts one byte left per preceding `\|`
 //! in the cell; measuring the source needs none of that, because
 //! `TableCell` sourcepos is byte-exact with escapes intact
-//! (`tests/table.rs::a_table_cells_sourcepos_is_byte_exact_with_escapes_intact`
+//! (`a_table_cells_sourcepos_is_byte_exact_with_escapes_intact`
 //! pins it).
 //!
 //! # What this refuses to pad, and why

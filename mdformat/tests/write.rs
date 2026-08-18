@@ -89,7 +89,7 @@ const MARKED: &[u8] = b"\xef\xbb\xbf| a | b |\n| --- | --- |\n| 1 | 2 |\n";
 /// the mark: a mark is three bytes wide and an indent is any width, so no
 /// constant could have covered both. This tier is where that is worth restating,
 /// because a document it once refused is a document it now writes to disk. The
-/// library-level fixtures are `tests/partition.rs`'s `table-indented-lazy-row`
+/// library-level fixtures are the partition fixtures's `table-indented-lazy-row`
 /// and `mdformat::anchor`'s `every_cell_resolves_to_its_own_bytes`.
 const LAZY: &[u8] = b"   |a|b|\n   |-|-|\n   |1|2|\npara\n";
 
@@ -398,7 +398,7 @@ fn the_erroring_specimen_needs_all_three_conditions() {
 /// The regression this file used to assert the other way round. A byte order
 /// mark in front of a multi-row table exited 5 and wrote nothing; it now goes
 /// all the way to disk, padded, with the mark still the file's first three
-/// bytes. Asserted here as well as in `tests/normal_form.rs` because only this
+/// bytes. Asserted here as well as in the hand-written fixture suite because only this
 /// tier can show the bytes reaching a file rather than a return value — and
 /// because the mark is precisely the kind of byte a rewrite could drop without
 /// any in-process assertion noticing.
@@ -432,7 +432,7 @@ fn a_byte_order_marked_table_is_rewritten_in_place() {
 /// exited 5 under every verb, and now exits 0 under all three.
 ///
 /// It is a *declination* rather than a rewrite, and that is the point of
-/// asserting it here rather than only in `tests/partition.rs`. The lazy row is
+/// asserting it here rather than only in the partition fixtures. The lazy row is
 /// one cell short of its header, so the tables rule leaves the table verbatim
 /// and says so — and only under this tier is that sentence the product. A person
 /// gets a named exemption where they used to get a refusal, and the file is
@@ -460,7 +460,7 @@ fn an_indented_table_with_a_lazy_row_is_reported_rather_than_refused() {
     assert!(stderr.contains("0/1 files rewritten"), "{stderr}");
 
     // The second of the three verbs the refusal used to reach. The third,
-    // `partition`, is covered by `tests/partition.rs`'s `table-indented-lazy-row`
+    // `partition`, is covered by the partition fixtures's `table-indented-lazy-row`
     // fixture, which this file's `run` helper cannot reach — it prepends
     // `format` to every invocation on purpose.
     let (code, _, stderr) = run(&["--check", &s(&p)]);

@@ -1,7 +1,7 @@
 //! Blank-line normalization: the normal form, and every hazard that decided
 //! its shape.
 //!
-//! Same fixture discipline as `partition.rs`: every specimen is an embedded
+//! Same fixture discipline as the partition fixtures: every specimen is an embedded
 //! byte literal, never an on-disk `.md` file. That matters more here than
 //! anywhere else in the crate — these specimens are *about* whitespace, and a
 //! specimen on disk is one formatting pass away from having exactly the
@@ -534,7 +534,7 @@ fn a_blockquotes_interior_is_untouched_while_the_gap_beside_it_collapses() {
 /// partition that reasoning is void, so `normalize` refuses to rewrite at all
 /// rather than deleting bytes it cannot account for.
 ///
-/// The specimen is `negative_controls.rs`'s indented-code-in-the-last-list-item
+/// The specimen is the negative-control suite's indented-code-in-the-last-list-item
 /// shape, whose content genuinely lands in no span.
 #[test]
 fn an_input_that_fails_the_partition_is_not_rewritten() {
