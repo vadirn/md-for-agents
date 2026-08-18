@@ -1,0 +1,26 @@
+# Workspace root for the markdown toolchain: mdstruct → mdread, with mdformat as
+# a sibling consumer of the same core. Extracted from the nix monorepo so the
+# crates version independently of the system configuration that installs them.
+#
+# One workspace, one lockfile, one hash: shared dependencies are declared here
+# and inherited with `.workspace = true`, so two members cannot drift onto
+# different versions of the same crate.
+[workspace]
+resolver = "3"
+members = ["mdstruct", "mdread", "mdformat"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+mdstruct = { path = "mdstruct" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+comrak = "0.53"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+unicode-width = "0.2"
