@@ -2,6 +2,8 @@
 name = "mdstruct"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Shared comrak-backed markdown structural-parsing core: locates structure, emits half-open byte spans, never restringifies."
 
 [dependencies]

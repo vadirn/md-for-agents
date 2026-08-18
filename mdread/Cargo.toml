@@ -2,6 +2,8 @@
 name = "mdread"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Progressive-unfolding structured Markdown reader: fold a file to a heading tree, unfold one addressed section. A thin consumer of the mdstruct core."
 
 [[bin]]
