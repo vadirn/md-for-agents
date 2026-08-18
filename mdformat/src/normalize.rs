@@ -28,7 +28,7 @@
 //!
 //! The front-matter clause is what the table says and no more: front matter is
 //! followed by exactly one blank line, like every other block. That codifies
-//! the vault's existing convention instead of fighting it. The opposite
+//! the corpus's existing convention instead of fighting it. The opposite
 //! clause — *no* blank line after front matter — was measured and withdrawn: it
 //! changed 988 of 1052 corpus files for a cosmetic preference, 990 of the 1009
 //! gap rewrites it produced. Keeping this one costs 0 corpus files.
@@ -84,9 +84,9 @@
 //!
 //! comrak reports a top-level indented code block starting at **column 5**, so
 //! its four-space indent belongs to no span and falls in the gap. Deleting it
-//! turns the block into whatever its text says — in `30 notes/Nix, nix-shell.md`
-//! (the corpus's only live exposure) a `CodeBlock` became a `List > Item >
-//! Paragraph`. Three fixes were available:
+//! turns the block into whatever its text says — in the corpus's only live
+//! exposure a `CodeBlock` became a `List > Item > Paragraph`. Three fixes were
+//! available:
 //!
 //! - *Exclude `CodeBlock` spans from tightening.* **Refuted on the merits**: the
 //!   indent is outside the raw span before any tightening happens, so this does

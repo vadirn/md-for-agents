@@ -92,9 +92,9 @@ mod tests {
     #[test]
     fn path_page_with_heading() {
         assert_eq!(
-            decompose("41 projects/nix/Nix#Direction"),
+            decompose("projects/alpha/Overview#Direction"),
             WikiTarget {
-                page: "41 projects/nix/Nix".into(),
+                page: "projects/alpha/Overview".into(),
                 heading: Some("Direction".into()),
                 block: None,
             }

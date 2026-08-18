@@ -23,7 +23,7 @@
 //! out of a rule saying nothing about line endings at all.
 //!
 //! LF is the ruling, on the ground that it is the default on the two systems
-//! this vault lives on.
+//! this corpus lives on.
 //!
 //! # Every carriage return is a line ending
 //!

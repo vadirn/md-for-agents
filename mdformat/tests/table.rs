@@ -2,7 +2,7 @@
 //! that decide its open questions.
 //!
 //! Every fixture is an embedded byte literal, for the same reason
-//! `negative_controls.rs`'s are: a specimen on disk is one `autoformat` pass
+//! `negative_controls.rs`'s are: a specimen on disk is one formatting pass
 //! away from being rewritten into something that no longer reproduces the shape
 //! under test — and the shapes here are *made of whitespace*, so that risk is at
 //! its worst.
@@ -85,7 +85,7 @@ fn a_table_cells_sourcepos_is_byte_exact_with_escapes_intact() {
     );
 }
 
-/// The corpus's only alignment specimen (`20 cards/Faster CRDTs.md`), padded by
+/// The corpus's only alignment specimen, padded by
 /// hand: a left-aligned first column and two right-aligned ones, whose cells are
 /// padded on the **left**. The rewrite must reproduce it byte for byte, which is
 /// simultaneously a fixpoint claim and the strongest available evidence that the
@@ -133,7 +133,7 @@ fn squeezing_the_alignment_specimen_and_repadding_restores_it() {
 }
 
 /// The corpus's only ragged table, reduced to its operative row
-/// (`35 experiments/2026-07-30-mdstruct-span-passthrough.md`): a cell holding an
+/// a cell holding an
 /// unescaped `|` **inside a code span**, which GFM splits on anyway. comrak
 /// drops the excess cell from the tree and leaves its bytes on the line, so an
 /// AST-driven padder would delete them.

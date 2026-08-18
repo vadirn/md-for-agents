@@ -3,13 +3,13 @@
 //!
 //! Every fixture is an embedded byte literal, never an on-disk `.md` file:
 //! `mdstruct/tests/roundtrip.rs` set that precedent because a fixture on disk
-//! is one `autoformat` pass away from being silently rewritten — and a printer
+//! is one formatting pass away from being silently rewritten — and a printer
 //! whose fixtures get reformatted tests nothing. Byte literals also let CRLF,
 //! a lone `\r`, and a BOM appear exactly as bytes.
 //!
-//! The fixtures aim at two things: constructs this vault actually holds and
+//! The fixtures aim at two things: constructs this corpus actually holds and
 //! that a naive printer would damage, and — since a corpus proves nothing
-//! about what it lacks — the Obsidian constructs a census of all 1052 vault
+//! about what it lacks — the Obsidian constructs a census of all 1052 corpus
 //! files found ZERO live occurrences of. Those are marked `zero in corpus`
 //! below; the corpus run cannot exercise them, so only a fixture can.
 //!
@@ -93,7 +93,7 @@ const FIXTURES: &[(&str, &str)] = &[
     ),
     // A footnote definition whose destination is a single token IS a valid link
     // reference definition, so comrak deletes it and a synthetic block has to
-    // claim the line. Four operative vault files rest on this.
+    // claim the line. Four operative corpus files rest on this.
     (
         "footnote-definition-bare-url",
         "Body text[^1].\n\n[^1]: https://example.com/a/deep/path\n",
@@ -264,7 +264,7 @@ const FIXTURES: &[(&str, &str)] = &[
         "- item one\n- last item:\n\n        code line one\n        code line two\n",
     ),
     // An indented code block inside a list item, which truncates the sourcepos
-    // of every container above it — reduced from `30 notes/Goals.md`.
+    // of every container above it — reduced from a corpus file.
     (
         "indented-code-in-list",
         "1.  First [P1]\n\n        - Status: In Development\n\n2.  Second [P2]\n\n        - Status: Assisting\n\n---\n",
@@ -484,11 +484,11 @@ fn a_dropped_link_reference_definition_is_claimed_by_a_synthetic_block() {
     assert_eq!(reassemble(src, &blocks), src);
 }
 
-/// The same hazard reached through a footnote definition, which is how this
-/// vault keeps bibliographies. With a single-token destination,
+/// The same hazard reached through a footnote definition, which is how the
+/// corpus keeps bibliographies. With a single-token destination,
 /// `[^1]: https://x.io` IS a valid link reference definition and comrak
 /// deletes it; `[^1]: Author, Title, 2020` is not one and survives as a
-/// paragraph. Four operative vault files hold the deleted form, so this pins
+/// paragraph. Four operative corpus files hold the deleted form, so this pins
 /// both sides of the boundary.
 #[test]
 fn a_footnote_definition_is_claimed_whether_or_not_comrak_keeps_it() {
@@ -546,7 +546,7 @@ fn an_out_of_range_sourcepos_errors_instead_of_clamping() {
 /// passthrough printer. Normalizing them is [`mdformat::normalize`]'s job and
 /// is opt-in, so `reassemble` must not touch them.
 ///
-/// An earlier version of this comment claimed the vault holds "427 double-blank
+/// An earlier version of this comment claimed the corpus holds "427 double-blank
 /// and 71 triple-blank gaps". That number could not be reproduced: the corpus
 /// contains **3** occurrences of `\n\n\n` in 2 files, every one inside a fenced
 /// code block or a container, and none in a top-level gap.
@@ -600,7 +600,7 @@ fn only_top_level_blocks_are_claimed() {
 
 /// comrak truncates a container's end when an indented code block sits inside a
 /// list item, which is why every top-level span is the union of its own range
-/// and its block descendants'. Reduced from `30 notes/Goals.md`, where the
+/// and its block descendants'. Reduced from a corpus file, where the
 /// raw sourcepos left 179 bytes of list content in no span at all: the item's
 /// own code block reports an EMPTY range, and only the last item's spans are
 /// right. Both halves are asserted, so a comrak release that fixes the

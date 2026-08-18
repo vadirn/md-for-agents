@@ -179,7 +179,7 @@ fn fill(tmp: &Path, contents: &str) -> io::Result<()> {
 }
 
 /// A sibling of `target`, in the same directory, whose name no other run can
-/// pick: hidden (so a vault indexer ignores it), tagged with the process id,
+/// pick: hidden (so an indexer ignores it), tagged with the process id,
 /// and counted within the process.
 fn temp_path(target: &Path) -> PathBuf {
     static NEXT: AtomicU64 = AtomicU64::new(0);

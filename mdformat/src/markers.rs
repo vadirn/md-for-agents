@@ -20,7 +20,7 @@
 //!
 //! # This rule is preservative, and that is the point
 //!
-//! A census of the vault found the corpus unanimous: 10 958 of 10 958 bullet
+//! A census found the corpus unanimous: 10 958 of 10 958 bullet
 //! items already use `-`, 2519 of 2519 ordered items already use `.`, and no
 //! file mixes markers. So the expected corrective effect was **zero files**,
 //! and zero was the pass condition rather than an argument that the rule is
@@ -38,9 +38,9 @@
 //!   anywhere.
 //!
 //! That one file is the argument for the rule stated as evidence rather than as
-//! a forecast. It is not vault prose; it is content that arrived from outside,
+//! a forecast. It is not corpus prose; it is content that arrived from outside,
 //! carrying the marker its source used. Drift has real entry points — pasted
-//! content, other tools, and agents writing into the vault all emit `*` bullets
+//! content, other tools, and agents writing into the corpus all emit `*` bullets
 //! routinely — and this rule closes them.
 //!
 //! The **zero declined constructs** is the key half, because it

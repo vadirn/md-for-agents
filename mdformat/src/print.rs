@@ -18,7 +18,7 @@
 //! once in source order **whatever the spans are** — the gap slice absorbs
 //! any boundary error, so `reassemble(src, blocks) == src` holds for a span
 //! set shortened by one byte per block just as it does for the true one. An
-//! earlier scan of this vault made exactly that mistake and had to discard the
+//! earlier scan of this corpus made exactly that mistake and had to discard the
 //! result. `tests/partition.rs::reassembly_alone_misses_what_the_partition_catches`
 //! keeps the trap documented as a live assertion.
 //!
@@ -51,7 +51,7 @@
 //!
 //! **A container's end can fall short of its content.** An indented code block
 //! inside a list item truncates the spans of everything containing it: in
-//! `30 notes/Goals.md` the list at line 74 reports `74:1-83:9`, ending on the
+//! one corpus file the list at line 74 reports `74:1-83:9`, ending on the
 //! *ninth column* of a line whose content runs to line 86, and the offending
 //! item's own code block reports the empty range `76:9-76:9`. Taking the
 //! container's sourcepos at face value leaves 179 bytes of real content in no
@@ -69,18 +69,17 @@
 //! `tests/negative_controls.rs::an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered`
 //! holds that shape open as an asserted failure, with the same list at EOF as
 //! its passing control. Corpus exposure is zero: comrak finds 8 indented code
-//! blocks across the 1052-file vault — 7 in `30 notes/Goals.md`, 1 in
-//! `30 notes/Nix, nix-shell.md` — and every one has a later sibling to borrow
-//! from.
+//! blocks across the 1052-file corpus, spread over two files, and every one
+//! has a later sibling to borrow from.
 //!
 //! **Link reference definitions vanish.** comrak consumes them without
 //! emitting a node, so their bytes belong to no span:
 //! `"[a]: https://x.io\n\nbody\n"` yields a single paragraph covering `body`
-//! alone. This is not theoretical for a vault that keeps bibliographies as
+//! alone. This is not theoretical for a corpus that keeps bibliographies as
 //! footnote definitions — `[^1]: https://x.io` is a *valid* link reference
 //! definition (label `^1`, destination `https://x.io`) and is deleted, while
 //! `[^1]: Author, Title, 2020` is not one and survives as a paragraph. Four
-//! operative vault files depend on the difference. [`block_spans`] models the
+//! operative corpus files depend on the difference. [`block_spans`] models the
 //! dropped lines as `linkReferenceDefinition` blocks so the printer emits
 //! them; the recognition is line-exact and shape-checked
 //! ([`opens_link_reference_definition`]), never a blanket tolerance for
@@ -238,7 +237,7 @@ pub fn block_spans<'a>(root: &'a AstNode<'a>, source: &str) -> Result<Vec<Block>
 /// which is why this can coexist with the one-byte-shortening injection test.
 ///
 /// A definition whose destination sits on a following line leaves that line
-/// unclaimed and the file failing. Vault exposure is zero, and inventing a
+/// unclaimed and the file failing. Corpus exposure is zero, and inventing a
 /// continuation rule would widen exactly the tolerance this keeps narrow.
 /// `tests/negative_controls.rs::a_link_reference_definition_with_a_continued_destination_loses_its_destination`
 /// asserts that failure rather than leaving it as a comment, so widening the

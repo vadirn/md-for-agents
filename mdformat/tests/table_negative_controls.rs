@@ -128,7 +128,7 @@ fn the_tree_signatures_are_jointly_blind_to_a_synthesized_cell() {
 /// cell in the first place.
 ///
 /// This is the shape the corpus actually contains
-/// (`35 experiments/2026-07-30-mdstruct-span-passthrough.md`), which is why the
+/// which is why the
 /// real padder declines the table rather than trusting the AST.
 #[test]
 fn a_padder_that_drops_a_long_rows_overflow_is_rejected() {

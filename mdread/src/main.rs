@@ -41,7 +41,7 @@ struct Cli {
     /// Output format: text (default) or json
     #[arg(long, default_value = "text")]
     format: TextJson,
-    /// Count only column-1, non-setext ATX headings (the stricter vault rule);
+    /// Count only column-1, non-setext ATX headings (the stricter rule);
     /// the default follows CommonMark, which allows 0-3 spaces of indent
     #[arg(long)]
     strict_headings: bool,

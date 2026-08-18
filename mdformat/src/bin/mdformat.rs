@@ -40,7 +40,7 @@
 //! [`mdformat::table`], the gap and blank-line-site counts in
 //! [`mdformat::normalize`], and the front-matter clause withdrawn there for
 //! costing 988 of 1052 files all come from batch runs of `mdformat normalize`
-//! and `mdformat pad` over the vault corpus. Re-measuring any of them now means
+//! and `mdformat pad` over the corpus. Re-measuring any of them now means
 //! `format --check --rule <name>` and its summary line, which counts one
 //! departure per changed line: the same number `normalize` reported as a
 //! rewritten gap, and `pad`'s changed-line count rather than its table count.
@@ -71,7 +71,7 @@
 //! its module docs arguing must be legible. Removing it costs close to nothing
 //! in lines: over this repository's 380 tracked `.md` files the report it
 //! gated is empty (zero declinations, zero exempt constructs), and over the
-//! 1056-file vault corpus it is **one** line, a ragged table the `tables` rule
+//! 1056-file corpus it is **one** line, a ragged table the `tables` rule
 //! leaves verbatim. That is the whole price of never having to know to ask.
 //!
 //! `partition` keeps a `--verbose`, and it is a different flag doing a different

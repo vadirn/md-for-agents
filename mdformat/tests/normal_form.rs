@@ -73,7 +73,7 @@
 //!
 //! # Idempotence, locked at both levels
 //!
-//! A probe measured the composition over the 1244-file vault and found the
+//! A probe measured the composition over the 1244-file corpus and found the
 //! second pass changed nothing. That is evidence over one corpus, not a proof,
 //! and nothing in the suite enforced it. Here it is enforced per fixture
 //! ([`every_expectation_is_a_fixpoint`], [`formatting_twice_changes_nothing`]).
@@ -86,7 +86,7 @@
 //!
 //! # Coverage the corpus cannot give
 //!
-//! A probe measured 0 whole-document declinations across 1244 vault files, so
+//! A probe measured 0 whole-document declinations across 1244 corpus files, so
 //! the decline path fires only here. The same holds for an unterminated fence
 //! at EOF and for an emoji in a table cell — the one place the display-width
 //! measure and the character count disagree. Every one of those is a fixture
@@ -115,7 +115,7 @@
 //!
 //! Every specimen is an embedded byte literal, for the reason `table.rs`'s
 //! fixtures are: these shapes are *made of whitespace*, and a specimen on disk
-//! is one `autoformat` pass away from no longer being the specimen.
+//! is one formatting pass away from no longer being the specimen.
 
 use mdformat::{Format, check, format};
 
@@ -280,7 +280,7 @@ const FIXTURES: &[Fixture] = &[
     },
     // ------------------------------------------------------------ endings --
     Fixture {
-        // Zero corpus exposure: 0 of the vault's 1244 files hold a carriage
+        // Zero corpus exposure: 0 of the corpus's 1244 files hold a carriage
         // return, so every fixture in this section is the only exercise its
         // clause gets. Two rules agree on this one — the gap rule states its
         // separators as LF literals, and the endings rule would rewrite them
@@ -406,7 +406,7 @@ const FIXTURES: &[Fixture] = &[
     // ------------------------------------------------------------ markers --
     Fixture {
         // The census says this fires on 0 corpus files, because 10 958 of
-        // 10 958 vault bullets are already `-`. So these fixtures are the only
+        // 10 958 corpus bullets are already `-`. So these fixtures are the only
         // exercise the clause gets, exactly as the endings section is.
         name: "markers: a star bullet becomes a dash",
         clause: "a bullet list item is introduced by `-`",
@@ -478,7 +478,7 @@ const FIXTURES: &[Fixture] = &[
     // ------------------------------------------------------- declinations --
     Fixture {
         // Fixture-only territory: 0 whole-document declinations across 1244
-        // vault files. A ragged row makes `pad` decline the table — comrak
+        // corpus files. A ragged row makes `pad` decline the table — comrak
         // does not model raggedness, so padding it would either delete the
         // long row's overflow or materialize the short row's missing cell.
         // The document is therefore *normal* while holding an unpadded table.
@@ -673,7 +673,7 @@ fn formatting_twice_changes_nothing() {
 /// no departure while doing so.
 ///
 /// The declining fixtures are the only exercise this path gets: a probe
-/// measured 0 whole-document declinations across the 1244-file vault, so
+/// measured 0 whole-document declinations across the 1244-file corpus, so
 /// without these the decline branch of `RuleRun::new` is dead code in every
 /// run that is not this test.
 #[test]
@@ -846,7 +846,7 @@ fn a_column_narrower_than_three_is_not_the_normal_form() {
 /// **Asserted failure (c).** Counting characters instead of terminal columns
 /// is the measure that agrees with display width everywhere in the corpus
 /// *except* on emoji — so this is the only specimen that can refute it, and
-/// there is none like it in the vault. Under a character count the two poppers
+/// there is none like it in the corpus. Under a character count the two poppers
 /// measure 2, the column falls to the floor of 3, and the delimiter loses a
 /// dash.
 #[test]
@@ -969,7 +969,7 @@ fn check_faults_a_file_whose_only_crlf_no_other_rule_can_reach() {
 
 /// **Asserted failure (g).** `*` is the other conventional bullet, and it is
 /// not this normal form's. The census settled the direction — 10 958 of 10 958
-/// vault bullets are `-` — and no guard can settle it, because every candidate
+/// corpus bullets are `-` — and no guard can settle it, because every candidate
 /// bullet produces the same parse and the same render. Pinned as a refusal so
 /// that reversing the direction is a deliberate act with a red test attached.
 #[test]
@@ -1040,7 +1040,7 @@ fn check_reports_a_star_bullet_as_departing_from_normal_form() {
 }
 
 /// The counterpart: a document whose lists are already `-` and `.` is normal
-/// and is a fixpoint. This is the state the whole vault is in, which is what
+/// and is a fixpoint. This is the state the whole corpus is in, which is what
 /// makes the rule preservative rather than corrective — and why it must not
 /// fault the corpus.
 #[test]

@@ -1,4 +1,4 @@
-//! The pinned JSON structural-model schema ([[mdstruct-plan]] §2).
+//! The pinned JSON structural-model schema.
 //!
 //! One envelope, camelCase on the wire, one `span` primitive (half-open UTF-8
 //! byte offsets serialized as a two-element array), `type` on every tagged node,
@@ -16,7 +16,7 @@ use super::region::Dangling;
 /// slicing the (table-cell-unreliable) span.
 /// 1.2 (recognition-only over 1.1, no wire-shape change): the region scanner
 /// gained an indented-code + multi-line-HTML-comment mask. The bump is the
-/// deploy-skew handshake — a consumer that pins `"1.2"` (distill's `parseDoc`)
+/// deploy-skew handshake — a consumer that pins `"1.2"`
 /// fails loud against a stale binary emitting `"1.1"` instead of silently
 /// reading its pre-mask (phantom-region-prone) `regions[]`.
 /// 1.3 (additive-minor over 1.2): `inlines[]` gained `Inline::Emph` and
@@ -97,9 +97,9 @@ pub struct FrontMatter {
     pub start_line: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_line: Option<u32>,
-    /// Byte at which the post-frontmatter body begins (distill slices here).
+    /// Byte at which the post-frontmatter body begins (consumers slice here).
     pub body_start_byte: usize,
-    /// 1-based line at which the body begins (vault-query's exact need).
+    /// 1-based line at which the body begins.
     pub body_start_line: u32,
 }
 
@@ -113,10 +113,10 @@ pub struct Heading {
     pub node_type: &'static str,
     pub level: u8,
     pub setext: bool,
-    /// The ONE column any consumer reads (vault-query indent filter).
+    /// The ONE column any consumer reads (the indent filter).
     pub start_col: usize,
     pub span: Span,
-    /// Post-`#` text span (vault-query slugs THIS).
+    /// Post-`#` text span (slugging reads THIS).
     pub text_span: Span,
     pub start_line: u32,
     pub end_line: u32,
@@ -125,7 +125,7 @@ pub struct Heading {
     pub children: Vec<Heading>,
 }
 
-/// Flat doc-order, NON-heading blocks (distill's harvest feed). Container nodes
+/// Flat doc-order, NON-heading blocks (the harvest feed). Container nodes
 /// carry `children[]`, which is descriptive and EXCLUDED from total tiling.
 #[derive(Debug, Clone, Serialize)]
 #[serde(
@@ -214,7 +214,7 @@ pub enum Node {
     },
     /// CommonMark link reference definition (`[label]: dest`); comrak consumes
     /// it to metadata with NO AST node. Recovered by the gap-filler so its
-    /// bytes tile and distill's `[^n]: url` citations are not lost.
+    /// bytes tile and `[^n]: url` citations are not lost.
     LinkReferenceDefinition {
         span: Span,
         start_line: u32,

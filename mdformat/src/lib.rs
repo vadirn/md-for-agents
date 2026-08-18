@@ -78,7 +78,7 @@
 //! [`markers`] unifies every bullet to `-` and every ordered delimiter to `.`.
 //! It is the first rule here written against [`format`]'s contract rather than
 //! retrofitted into it, and the first that is **preservative**: a census found
-//! the vault unanimous on both markers, so its expected corrective effect on
+//! the corpus unanimous on both markers, so its expected corrective effect on
 //! today's corpus is zero files, and zero is what it is supposed to do.
 //!
 //! It rewrites content bytes, so it cannot inherit the gap rule's cheap

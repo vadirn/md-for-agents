@@ -32,7 +32,7 @@
 //!
 //! Specimens are byte literals for the reason `normal_form.rs`'s are: a
 //! carriage return is one editor pass away from not being there. The corpus
-//! cannot supply any of this — 0 of the vault's 1244 files hold a `\r`.
+//! cannot supply any of this — 0 of the corpus's 1244 files hold a `\r`.
 
 use mdformat::{RuleRun, Structure, check, structure_of, to_lf};
 

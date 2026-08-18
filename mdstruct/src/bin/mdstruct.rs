@@ -126,7 +126,7 @@ Examples:
   mdstruct note.md | jq '.headings'          structural model piped to jq
   mdstruct --pretty note.md                  human-readable single-doc JSON
   echo '# hi' | mdstruct -                   parse stdin ('-' or no path)
-  mdstruct check ~/vault/**/*.md             freeze-gate a corpus (exit 4 on fail)
+  mdstruct check ~/docs/**/*.md              freeze-gate a corpus (exit 4 on fail)
   mdstruct stats note.md                     type-coverage table on stdout
   mdstruct check --region interact note.md   warn on 'interact' dangling anchors
   mdstruct --schema-version                  print the schema contract version";
@@ -142,7 +142,7 @@ Exit codes:
 
 Examples:
   mdstruct check note.md                              gate a single file
-  mdstruct check ~/vault/**/*.md                      gate a corpus
+  mdstruct check ~/docs/**/*.md                       gate a corpus
   mdstruct check --region interact note.md            warn on 'interact' dangling anchors (stderr)
   mdstruct check --region interact --format ndjson -  same, as JSON records on stdout";
 

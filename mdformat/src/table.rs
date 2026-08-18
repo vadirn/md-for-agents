@@ -49,7 +49,7 @@
 //! ## What the exemption costs, stated against it
 //!
 //! The exemption costs no width and saves a great deal of it. Padding every
-//! column added **261 920 spaces** to the 1052-file vault corpus; the exemption
+//! column added **261 920 spaces** to the 1052-file corpus; the exemption
 //! brings that down to **31 648 spaces** — 88% less. Those two figures are
 //! unaffected by the delimiter rule, since a delimiter row's spaces are the
 //! separators, not the dashes. The byte figures that accompanied them (301 561
@@ -73,11 +73,11 @@
 //! fixpoints of the uncapped padder now change: **245 of 247** tables are
 //! rewritten where the uncapped form rewrote 170, and 149 files change where 124
 //! did. Of the 76 tables the uncapped padder already agreed with, 75 now lose
-//! padding a human put there. Those four counts were measured over the vault
+//! padding a human put there. Those four counts were measured over the corpus
 //! corpus against the full-width delimiter rule; the header-width rule can only
 //! raise them, since it changes bytes in tables the exemption already rewrote
 //! and can newly disagree with a hand-padded delimiter. The one survivor is
-//! `20 cards/Faster CRDTs.md`, and it survives under both rules for the same
+//! a single right-aligned table, and it survives under both rules for the same
 //! reason: its trailing column is right-aligned, so neither the fill exemption
 //! nor the header-width delimiter reaches it.
 //!
@@ -104,7 +104,7 @@
 //! ## Escaped pipes count the backslash
 //!
 //! A cell's width is measured over its **source** bytes, escapes intact, so
-//! `\|` counts 2. That is the vault's own convention where it is legible:
+//! `\|` counts 2. That is the corpus's own convention where it is legible:
 //! `.claude/skills/obsidian-markdown/SKILL.md` runs `[[Link\|Display]]` — 17
 //! characters — against 17 dashes. Measuring the *rendered* text instead would
 //! need inline sourcepos, which comrak shifts one byte left per preceding `\|`
@@ -124,7 +124,7 @@
 //! there is no column for an excess cell to be padded into, and materializing a
 //! missing one changes the source's shape, the padder declines the table
 //! instead of guessing. The corpus holds exactly one such table
-//! (`35 experiments/2026-07-30-mdstruct-span-passthrough.md`, whose last row
+//! (whose last row
 //! carries an unescaped `|` inside a code span — GFM splits cells there even
 //! inside backticks).
 //!
@@ -165,7 +165,7 @@ use crate::span::{LineIndex, PosError};
 use crate::structure::{StructureDiff, structure_of};
 
 /// Minimum column width. `---` is the conventional delimiter and `:-:` is the
-/// widest marker pair, so 3 is both the vault's convention (13 of the corpus's
+/// widest marker pair, so 3 is both the corpus's convention (13 of the corpus's
 /// padded delimiter cells sit at exactly 3 dashes over narrower content) and
 /// the floor that keeps every alignment renderable.
 const MIN_WIDTH: usize = 3;

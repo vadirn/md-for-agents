@@ -29,15 +29,14 @@ pub(crate) fn comrak_options(opts: &Options) -> comrak::Options<'static> {
     o.extension.strikethrough = true;
     o.extension.tasklist = true;
     // Footnotes OFF: comrak silently DROPS unreferenced footnote definitions,
-    // and the vault's citation style is footnote-definitions-as-bibliography
-    // (no inline `[^x]`). On, this breaks total tiling (dropped def's bytes go
-    // uncovered) and vanishes distill's citations. Off, link reference definitions
+    // and a citation style of footnote-definitions-as-bibliography carries
+    // no inline `[^x]`. On, this breaks total tiling (dropped def's bytes go
+    // uncovered) and vanishes those citations. Off, link reference definitions
     // like `[^1]: https://example.com` parse as link refs (render nothing), while
     // definitions with whitespace in the destination like `[^1]: Some author, 2019`
     // fail to parse as link refs and fall back to paragraphs — tiled, content
-    // preserved. Footnote harvesting stays a distill-side regex lane, and fill_gaps
-    // back-covers any uncovered bytes. (Tested against comrak 0.53.0; see
-    // 35 experiments/2026-07-30-comrak-sourcepos-defects.md.)
+    // preserved. Footnote harvesting stays a consumer-side regex lane, and fill_gaps
+    // back-covers any uncovered bytes. (Tested against comrak 0.53.0.)
     o.extension.autolink = true;
     o.extension.front_matter_delimiter = Some("---".to_string());
     if opts.wikilinks {
@@ -288,7 +287,7 @@ fn build_subtree(flat: &[FlatHeading], from: usize, to: usize, idx: &LineIndex) 
 
 /// Fill non-whitespace tiling gaps with located nodes. comrak consumes some
 /// constructs (link reference definitions) to metadata with no AST node; unfixed,
-/// their bytes go uncovered and distill's `[^n]: url` citations vanish. Each
+/// their bytes go uncovered and `[^n]: url` citations vanish. Each
 /// blank-line-separated chunk becomes one node: link reference definition or
 /// (diagnostic) uncovered content.
 fn fill_gaps(
@@ -661,7 +660,7 @@ fn collect_inlines<'a>(
         // GFM table cells: comrak's inline sourcepos there is unreliable
         // (escaped-pipe cells shift offsets — R2). Non-wikilink inlines
         // (links, code spans, images, footnote refs) stay suppressed inside
-        // cells (Decision 19; distill re-slices raw cell bytes). Wikilinks and
+        // cells (Decision 19; consumers re-slice raw cell bytes). Wikilinks and
         // embeds ARE emitted (1.1): the consumer reads their decoded
         // `target`/`alias`, not the imprecise span, so table-cell backlinks are
         // not lost. Emphasis IS emitted too (1.3) on a weaker warrant: the
@@ -811,7 +810,7 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
                 }
                 let end = inner_end + 2;
                 // Split on the FIRST pipe: target before, alias after (mirrors
-                // vault-query's regex — the alias keeps any later pipes, and an
+                // the alias keeps any later pipes, and an
                 // empty-pipe `![[X|]]` yields `Some("")`). The embed span is a
                 // byte-exact literal scan, so this raw split is reliable.
                 let (target, alias) = match inner.split_once('|') {

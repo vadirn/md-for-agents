@@ -1,6 +1,6 @@
 //! Specimens the partition oracle must **reject**.
 //!
-//! `partition.rs` asserts the oracle passes on everything the vault holds. That
+//! `partition.rs` asserts the oracle passes on everything the corpus holds. That
 //! is only half a contract: an oracle that never fails passes those tests too,
 //! so a regression that silently disabled checking would read as green. These
 //! two specimens pin the failure path against a *real* parser defect rather
@@ -14,7 +14,7 @@
 //! sets the oracle exists to refuse.
 //!
 //! Each specimen is an embedded byte literal, for the same reason the
-//! `partition.rs` fixtures are: a specimen on disk is one `autoformat` pass
+//! `partition.rs` fixtures are: a specimen on disk is one formatting pass
 //! away from being rewritten into something that no longer reproduces the
 //! defect.
 //!
@@ -156,7 +156,7 @@ fn the_same_list_at_eof_passes_isolating_the_trailing_block_as_the_cause() {
 ///
 /// The fill stays narrow on purpose: every line it claims is a line the oracle
 /// stops checking, and a continuation rule would have to guess how far a
-/// definition runs. Vault exposure is zero (see `print.rs`), so this specimen
+/// definition runs. Corpus exposure is zero (see `print.rs`), so this specimen
 /// records the cost of that choice rather than arguing against it.
 #[test]
 fn a_link_reference_definition_with_a_continued_destination_loses_its_destination() {

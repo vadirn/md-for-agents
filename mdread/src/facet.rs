@@ -14,9 +14,8 @@ pub enum HeadingRule {
     /// 0–3-space indents CommonMark allows. The general reader's default.
     #[default]
     CommonMark,
-    /// Vault-strict: column-1, non-setext ATX headings only. Reproduces
-    /// vault-query's historical `read` behavior (its `markdown.rs` scanner
-    /// rejected any leading whitespace).
+    /// Strict: column-1, non-setext ATX headings only. Reproduces an earlier
+    /// scanner's behaviour, which rejected any leading whitespace.
     StrictColumn1,
 }
 
@@ -28,9 +27,9 @@ pub enum LinkRule {
     /// and reporting zero links for it would be a lie.
     #[default]
     All,
-    /// `[[wiki]]` only — the Obsidian graph edge. Reproduces vault-query's
-    /// historical count, which measures the vault's link graph and must not
-    /// grow by counting URLs.
+    /// `[[wiki]]` only — the Obsidian graph edge. Reproduces the historical
+    /// count, which measures the link graph and must not grow by counting
+    /// URLs.
     Wikilinks,
 }
 

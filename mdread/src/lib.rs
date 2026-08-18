@@ -39,7 +39,7 @@ pub const DEFAULT_THRESHOLD: usize = 2000;
 
 /// The Markdown flavour a caller reads in: the two places where a defensible
 /// reading of the same bytes differs. [`Default`] is plain CommonMark; a caller
-/// with a stricter corpus (vault-query's `read`) overrides both.
+/// with a stricter corpus overrides both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Dialect {
     pub headings: HeadingRule,
@@ -356,8 +356,8 @@ fn emit_overview(
     }
 
     println!();
-    // Tool-agnostic: names addresses, not a command, so both the `mdread` CLI and
-    // the `vault-query read` wrapper print something true of themselves.
+    // Tool-agnostic: names addresses, not a command, so the `mdread` CLI and any
+    // wrapper around it print something true of themselves.
     println!(
         "next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links"
     );

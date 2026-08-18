@@ -4,7 +4,7 @@
 //! Same fixture discipline as `partition.rs`: every specimen is an embedded
 //! byte literal, never an on-disk `.md` file. That matters more here than
 //! anywhere else in the crate — these specimens are *about* whitespace, and a
-//! specimen on disk is one `autoformat` pass away from having exactly the
+//! specimen on disk is one formatting pass away from having exactly the
 //! whitespace under test rewritten out of it.
 //!
 //! The file has three parts.
@@ -97,7 +97,7 @@ const NORMAL_FORM: &[(&str, &[u8], &[u8])] = &[
     // empty rather than becoming one byte.
     ("empty", b"", b""),
     ("whitespace-only", b"\n \n\t\n", b""),
-    // Front matter takes one blank line like any other block: the vault's
+    // Front matter takes one blank line like any other block: the corpus's
     // existing convention, codified.
     (
         "frontmatter-normal",
@@ -347,7 +347,7 @@ fn the_partition_oracle_accepts_every_refused_specimen() {
 // 3. The indented-code fix
 // ---------------------------------------------------------------------------
 
-/// A top-level indented code block, reduced from `30 notes/Nix, nix-shell.md`
+/// A top-level indented code block, reduced from the corpus's only exposed file
 /// line 14 — the corpus's only file whose parse the unrepaired rule changed.
 ///
 /// comrak reports the block's sourcepos starting at **column 5**, so its

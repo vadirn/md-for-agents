@@ -3,14 +3,14 @@
 //! end to end through a real `comrak::parse_document` call, not just a
 //! struct-equality check on options. Fixtures are embedded byte literals
 //! (mdstruct/tests/roundtrip.rs sets this precedent) so no on-disk .md file
-//! risks getting reformatted by an editor or autoformat pass.
+//! risks getting reformatted by an editor or formatting pass.
 
 use comrak::Arena;
 use comrak::nodes::NodeValue;
 
 /// mdstruct deliberately leaves `extension.footnote` OFF: comrak would
 /// otherwise silently DROP unreferenced footnote definitions, breaking
-/// mdstruct's total tiling and erasing the vault's
+/// mdstruct's total tiling and erasing the corpus's
 /// footnote-definitions-as-bibliography citations (see the long comment on
 /// `mdstruct::core::build::comrak_options`). mdformat inherits that setting
 /// purely by calling `mdstruct::comrak_options` — this test proves the
@@ -20,7 +20,7 @@ use comrak::nodes::NodeValue;
 /// dropped `FootnoteDefinition`.
 #[test]
 fn shared_options_keep_footnote_definitions_as_paragraphs() {
-    let src = "[^1]: A footnote-style bibliography entry, vault convention.\n\nBody text.\n";
+    let src = "[^1]: A footnote-style bibliography entry, corpus convention.\n\nBody text.\n";
     let opts = mdstruct::Options::default();
     let comrak_opts = mdformat::comrak_options(&opts);
     let arena = Arena::new();
