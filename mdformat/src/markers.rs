@@ -31,7 +31,7 @@
 //! been found wrong, so the prediction was **re-measured against this rule**
 //! rather than inherited:
 //!
-//! - the `corpus.sh` corpus (files the vault's ignore rules admit): **0**
+//! - the vault corpus (files the vault's ignore rules admit): **0**
 //!   departures, **0** declined constructs;
 //! - the same corpus with `--no-ignore`: **1** file, 5 departures — all `+`
 //!   bullets in `.firecrawl/tomshardware-flash.md`, a scraped web page, and 0

@@ -76,10 +76,7 @@
 //! A probe measured the composition over the 1244-file vault and found the
 //! second pass changed nothing. That is evidence over one corpus, not a proof,
 //! and nothing in the suite enforced it. Here it is enforced per fixture
-//! ([`every_expectation_is_a_fixpoint`], [`formatting_twice_changes_nothing`]);
-//! `corpus.sh` enforces it over the corpus, as a second phase that runs by
-//! default (`--partition-only` skips it) under the same accounting guard the
-//! first phase carries.
+//! ([`every_expectation_is_a_fixpoint`], [`formatting_twice_changes_nothing`]).
 //!
 //! Commutativity of the rules is deliberately **not** asserted anywhere: it is
 //! a corpus-contingent observation, and `format.rs` fixes the pipeline order at
@@ -97,8 +94,8 @@
 //!
 //! **Nearly the whole marker rule is in that class**, and the exact figure was
 //! measured against the rule rather than taken from the census that motivated
-//! it. Over the corpus `corpus.sh` walks it changes **0** files; with
-//! `--no-ignore` it changes **1**, a scraped web page carrying `+` bullets. So
+//! it. Over the vault corpus it changes **0** files; with `--no-ignore` it
+//! changes **1**, a scraped web page carrying `+` bullets. So
 //! its corrective clause has one live specimen in the whole vault, and its
 //! **declinations have none**: no vault file holds a mixed adjacent pair, and
 //! none holds the nested `+ + +` whose unified form is a thematic break. Both

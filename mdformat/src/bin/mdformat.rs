@@ -13,10 +13,8 @@
 //! of [`mdformat::format`]'s contract — `format(f) == f` for every `f` already
 //! normal — asserted under that name across `tests/normal_form.rs`,
 //! `tests/endings.rs` and `tests/table.rs`. A verb meaning "the block spans
-//! partition the content bytes" had no claim on it. `corpus.sh` showed the
-//! collision at its sharpest: its `--fixpoint-only` flag *skipped* the
-//! idempotence phase, which is the phase that actually tests the fixpoint
-//! clause. The verb now takes the name every string it prints already uses.
+//! partition the content bytes" had no claim on it. The verb now takes the
+//! name every string it prints already uses.
 //!
 //! **`--rule` is what two verbs used to be.** `normalize` and `pad` were dry
 //! runs of the gap and table rules: each reported what its own rule would do,

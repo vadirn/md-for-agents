@@ -59,7 +59,7 @@
 //! which is the whole reason it exists. That file's module docs carry the full
 //! mutation table, including the two rows measured for [`MarkerRule`], one of
 //! which found that a byte fixture cannot see a per-construct declination at
-//! all. `corpus.sh` runs the idempotence half over the vault.
+//! all.
 //!
 //! [`RuleRun::departures`] localizes the same predicate: `is_normal` is byte
 //! equality, `departures` is *where* the equality fails. `RuleRun::new` asserts
