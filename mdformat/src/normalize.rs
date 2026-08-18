@@ -1,132 +1,5 @@
-//! Blank-line normalization: an **opt-in** rewrite of the whitespace *between*
-//! top-level blocks, guarded by re-parse structural equivalence.
-//!
-//! Nothing here runs unless a caller asks for it. `mdformat`'s default is still
-//! the passthrough printer of [`crate::print`], which changes no byte of any
-//! file; when this rewrite is permitted to touch real files is an open
-//! decision, and this module deliberately does not answer it — it has no write
-//! path at all, and [`normalize`] returns a candidate rather than performing
-//! anything.
-//!
-//! # The normal form
-//!
-//! Top-level gaps only. No recursion into containers.
-//!
-//! | position | emitted |
-//! | --- | --- |
-//! | before the first block | `""` |
-//! | after a `bom` block | `""` |
-//! | after `frontmatter` | `"\n\n"` (exactly one blank line) |
-//! | between any other two top-level blocks | `"\n\n"` (exactly one blank line) |
-//! | after the last block | `"\n"` |
-//!
-//! Rule 4 — no trailing whitespace on an otherwise-blank line — needs no clause
-//! of its own: a gap is *regenerated*, not edited, so whatever whitespace a
-//! blank line in a gap carried is gone. Trailing whitespace on a **content**
-//! line is out of scope by the same rule's wording, and stays (see the span
-//! definition below, which is what makes that true).
-//!
-//! The front-matter clause is what the table says and no more: front matter is
-//! followed by exactly one blank line, like every other block. That codifies
-//! the corpus's existing convention instead of fighting it. The opposite
-//! clause — *no* blank line after front matter — was measured and withdrawn: it
-//! changed 988 of 1052 corpus files for a cosmetic preference, 990 of the 1009
-//! gap rewrites it produced. Keeping this one costs 0 corpus files.
-//!
-//! # Why not recurse
-//!
-//! Two measured reasons, either fatal.
-//!
-//! **The rule's output alphabet is container-dependent.** Inside a block quote
-//! "one blank line" is `>`, not empty: `> a\n>\n> b` is one quote with two
-//! paragraphs and `> a\n\n> b` is two quotes. A recursive rule would have to
-//! emit the container's continuation prefix, which means it is no longer
-//! rewriting gap bytes — inside a container the separator is span *interior*,
-//! and never touching a span's interior is how **this** rule earns its
-//! faithfulness. That is a proof strategy, not the crate's safety property:
-//! [`crate::endings`] rewrites span interiors and is faithful for a different
-//! reason, which [`crate::format`] sets out. The strategy is the one available
-//! here because a gap rewrite's effect depends on the document — which is
-//! exactly why it also needs the guard below.
-//!
-//! **Applied between list items it would loosen every tight list.** The corpus
-//! holds 2532 tight lists (12770 items); one blank line between children makes
-//! every one loose and changes the rendered HTML of all of them.
-//!
-//! So the rule governs 12897 of the corpus's 13271 non-code blank-line sites
-//! and is silent on 374 — and those 374 are exactly the ones where a blank line
-//! carries meaning.
-//!
-//! # What "the gap" is
-//!
-//! Not the bytes between raw [`Block`] spans. `block_spans` returns spans that
-//! are trailing-newline-inclusive (a list's span usually ends on one, after the
-//! descendant union), so a raw-gap rule emits three newlines after every list.
-//! The gap is defined against **content spans** instead — and the sequence of
-//! content spans is a tiling of the file, so the bytes between two of them are
-//! whitespace *by the partition*, not by inspection: a non-whitespace byte
-//! between two content spans would lie in no span, which
-//! [`crate::check_partition`] forbids. That is what [`normalize`] requires the
-//! input partition for, and why it refuses to rewrite a file that fails it.
-//!
-//! A block's content span is its raw span
-//!
-//! 1. trimmed to its first and last non-whitespace byte, then
-//! 2. **extended left** to the start of that line when the prefix is blank, and
-//! 3. **extended right** to the end of the last line's content, before the line
-//!    ending.
-//!
-//! Steps 2 and 3 are one repair, not two features: comrak's block sourcepos
-//! omits bytes that belong to the block, and `block_spans` already compensates
-//! for that class of defect with its descendant union.
-//!
-//! ## Step 2 is the indented-code fix
-//!
-//! comrak reports a top-level indented code block starting at **column 5**, so
-//! its four-space indent belongs to no span and falls in the gap. Deleting it
-//! turns the block into whatever its text says — in the corpus's only live
-//! exposure a `CodeBlock` became a `List > Item > Paragraph`. Three fixes were
-//! available:
-//!
-//! - *Exclude `CodeBlock` spans from tightening.* **Refuted on the merits**: the
-//!   indent is outside the raw span before any tightening happens, so this does
-//!   not fix the case at all — and it would emit comrak's trailing-newline-
-//!   inclusive raw end verbatim for exactly the blocks whose trailing
-//!   whitespace is content.
-//! - *Refuse any gap whose deleted bytes hold four or more leading spaces.* A
-//!   detector, not a repair: the file stays permanently outside the normal
-//!   form, the rule's scope quietly becomes "top-level gaps except near
-//!   indented code", and it over-refuses — a blank line padded with four spaces
-//!   ahead of a fenced block is not an indented code block.
-//! - *Extend the span left to column 1.* **Chosen.** It removes the cause
-//!   rather than routing around it, and it is the same compensation
-//!   `block_spans` already applies for the same parser defect.
-//!
-//! Generalizing step 2 to every block, rather than to code blocks only, costs
-//! nothing and buys the 1–3-space case: an indent of one to three spaces is
-//! legal, sets `marker_offset`/`fence_offset`, and is likewise outside the
-//! block's sourcepos. Under a code-block-only fix those indents would be
-//! deleted — render-identical, attribute-changing, and refused by the oracle
-//! for no gain. Under the general rule they survive.
-//!
-//! ## Step 3 keeps trailing whitespace out of the gap
-//!
-//! Trimming a span to its last non-whitespace byte also eats trailing spaces on
-//! its last **content** line, which is harmless for a paragraph and fatal for an
-//! indented code block, whose literal is `"code   \n"`. Extending back to the
-//! line's content end leaves those bytes inside the span, where they are copied
-//! verbatim like every other byte a span covers.
-//!
-//! # The guard
-//!
-//! Every rewrite is checked with [`crate::structure`], and [`Normalization`]
-//! hands out its bytes only through [`Normalization::accepted`], which returns
-//! `None` unless the input partitioned and the re-parse is structurally
-//! equivalent. The partition oracle cannot serve here — it passed on 167 of 167
-//! synthetic documents this rewrite destroyed — and the shapes it misses are
-//! live: the gap tests pins a leading `---` promoted into front matter
-//! and a link reference definition deleted from the render, both of which
-//! partition cleanly and both of which this refuses.
+//! Opt-in rewrite of the whitespace between top-level blocks, gated by re-parse
+//! structural equivalence.
 
 use crate::print::{Block, PartitionReport, block_spans, check_partition, is_ws};
 use crate::span::{LineIndex, PosError};
@@ -198,8 +71,8 @@ fn separator(prev: Option<&str>) -> &'static str {
         // Front matter takes one blank line like any other block. The arm is
         // written out rather than folded into the fallback because this is the
         // one place someone would reinstate the withdrawn `"\n"` — no blank
-        // line after front matter — and doing so rewrites 988 of 1052 corpus
-        // files for a cosmetic preference.
+        // line after front matter — and doing so rewrites nearly every file
+        // that has one, for a cosmetic preference.
         Some("frontmatter") => "\n\n",
         Some(_) => "\n\n",
     }

@@ -1,11 +1,9 @@
-//! The ONE place line/column → half-open byte span is computed (comrak gap #1).
+//! The one place line/column becomes a half-open byte span.
 //!
-//! comrak's `Sourcepos` is 1-based line/col where the column is a UTF-8 **byte**
-//! count within the line (the default; `parse.sourcepos_chars` is NOT enabled)
-//! and `end` points at the **last byte** of the node's last character. So the
-//! exclusive end is `line_start(end.line) + end.column` — no `char_boundary`
-//! walk, and NEVER `+ utf8_len(last_char)` (a char-count-mode habit that
-//! overshoots 1–3 bytes on any multibyte-terminal block).
+//! comrak's `Sourcepos` column counts UTF-8 bytes within the line, and `end`
+//! points at the last byte of the node's last character. So the exclusive end is
+//! `line_start(end.line) + end.column`, never `+ utf8_len(last_char)`, which
+//! overshoots by 1-3 bytes on any block ending in a multibyte character.
 
 use comrak::nodes::Sourcepos;
 

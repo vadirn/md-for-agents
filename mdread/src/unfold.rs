@@ -1,6 +1,7 @@
 //! Smart-unfold: given an addressed node, decide per child whether to inline its
-//! (recursively unfolded) text or fold it to a placeholder line, and build both
-//! the text sink and the JSON `content` from a single walker so they cannot
+//! recursively unfolded text or fold it to a placeholder line.
+//!
+//! The text sink and the JSON `content` come from one walker, so they cannot
 //! diverge.
 
 use serde::Serialize;

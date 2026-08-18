@@ -1,10 +1,5 @@
-//! End-to-end coverage for the always-on masked region scanner (plan Phase A).
-//! The region scanner's unit tests drive `scan()` with a hand-built mask; these drive
-//! the whole `parse()` path so build.rs's mask construction (fenced-or-indented
-//! code-block spans + inline `NodeValue::Code` spans) is exercised for real —
-//! the layer the unit tests bypass. Scope: inline recognition,
-//! inline-code/fenced/indented masking, cross-block pairing, whole-line parity
-//! under a real fence mask, and the no-flag always-on contract.
+//! End-to-end coverage for the region scanner over the whole `parse()` path, so
+//! the mask construction the unit tests bypass is exercised for real.
 
 use mdstruct::{Options, Span, parse, verify_spans};
 
@@ -12,9 +7,6 @@ fn slice(src: &str, span: Span) -> &str {
     &src[span.start..span.end]
 }
 
-/// (7) Always-on with no flag: a plain `parse` under `Options::default()` emits
-/// the anchor pair into `regions[]`, and it reaches the serialized wire form
-/// (no `--region` registration exists any more).
 #[test]
 fn always_on_populates_regions_with_default_options() {
     let src = "<!-- keep -->\nbody\n<!-- /keep -->\n";
@@ -31,9 +23,6 @@ fn always_on_populates_regions_with_default_options() {
     assert_eq!(regions[0]["label"], "keep");
 }
 
-/// (2) Inline recognition: a mid-run `<!-- open -->…<!-- close -->` inside a
-/// text paragraph pairs with byte-offset spans (not line boundaries), and the
-/// region-slice oracle accepts the inline span.
 #[test]
 fn inline_anchor_pair_recognized_in_paragraph() {
     let src = "Lead text <!-- hl -->marked<!-- /hl --> and a tail.\n";
@@ -54,9 +43,6 @@ fn inline_anchor_pair_recognized_in_paragraph() {
     assert_eq!(r.end_line, 1);
 }
 
-/// (3a) Inline-code skip: an anchor inside inline code `` `<!-- x -->` `` is
-/// inert. Both endpoints buried in inline code → nothing pairs and nothing
-/// dangles. This exercises build.rs's `NodeValue::Code` mask pass.
 #[test]
 fn inline_code_anchors_are_inert() {
     let src = "prose `<!-- x -->` and `<!-- /x -->` done.\n";
@@ -65,8 +51,6 @@ fn inline_code_anchors_are_inert() {
     assert!(d.dangling.is_empty(), "masked anchors do not dangle either");
 }
 
-/// (3b) Fenced-block skip: a balanced open/close inside a fenced code block is
-/// inert. Exercises build.rs's `code_block_mask_spans` mask.
 #[test]
 fn fenced_block_anchors_are_inert() {
     let src = "before\n\n```\n<!-- x -->\n<!-- /x -->\n```\n\nafter\n";
@@ -75,10 +59,6 @@ fn fenced_block_anchors_are_inert() {
     assert!(d.dangling.is_empty(), "in-fence anchors do not dangle");
 }
 
-/// (3c) Indented-block skip: a balanced open/close inside a 4-space-indented
-/// code block is inert, exactly like a fenced block. Exercises build.rs's
-/// `code_block_mask_spans` mask now covering `NodeValue::CodeBlock(_)` regardless
-/// of `ncb.fenced`.
 #[test]
 fn indented_block_anchors_are_inert() {
     let src = "before\n\n    <!-- x -->\n    <!-- /x -->\n\nafter\n";
@@ -93,12 +73,6 @@ fn indented_block_anchors_are_inert() {
     );
 }
 
-/// (3d) Multi-line-HTML-comment skip: a `<!-- … -->` comment that spans more
-/// than one line carries anchor-looking `<!-- x -->` / `<!-- /x -->` text on its
-/// continuation lines. Each such block is masked whole (build.rs's multi-line
-/// HTML-comment mask pass), so the buried open/close neither pair into a phantom
-/// region nor dangle. Block-level sourcepos is reliable, so masking by the
-/// `HtmlBlock` span is sound.
 #[test]
 fn multiline_html_comment_anchors_are_inert() {
     // Two multi-line comment blocks: the first ends on a line carrying a
@@ -116,9 +90,6 @@ fn multiline_html_comment_anchors_are_inert() {
     );
 }
 
-/// (4) Cross-block pairing: an open mid-paragraph in one block and a close
-/// embedded in a later heading pair across the intervening blocks, with
-/// byte-offset endpoints and the correct open/close line numbers.
 #[test]
 fn cross_block_open_and_close_pair() {
     let src = "Intro <!-- note --> continues here.\n\n## Section <!-- /note -->\n\ntail\n";
@@ -139,11 +110,6 @@ fn cross_block_open_and_close_pair() {
     assert_eq!(slice(src, r.body_span), " continues here.\n\n## Section ");
 }
 
-/// (1) Whole-line parity under a real fence mask: the S7 shape — a whole-line
-/// open outside any fence, a stray same-label close buried in a fenced block,
-/// and the real whole-line close later — pairs the open with the REAL close and
-/// keeps the byte-identical line-based span, now through the always-on parse
-/// path (build.rs builds the fence mask, not the test).
 #[test]
 fn whole_line_parity_survives_masked_fence() {
     let src = "\

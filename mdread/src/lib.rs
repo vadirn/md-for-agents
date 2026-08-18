@@ -1,13 +1,8 @@
-//! `mdread` — a progressive-unfolding structured Markdown reader.
+//! A progressive-unfolding structured Markdown reader.
 //!
-//! Renders a Markdown file's heading tree folded to one line per section (with
-//! line and estimated-token stats), or smart-unfolds one addressed section.
-//! Structure comes from the shared [`mdstruct`] core; everything here is the
-//! reader's own policy — the fold thresholds, the token estimate, the address
-//! scheme, and the rendered shapes.
-//!
-//! Every rendered slice is cut from the original bytes: the reader never
-//! restringifies the source.
+//! Renders a file's heading tree folded to one line per section, or unfolds one
+//! addressed section. Structure comes from [`mdstruct`]; the fold thresholds,
+//! token estimate and address grammar are this crate's own.
 
 mod facet;
 mod format;
@@ -91,16 +86,10 @@ pub fn run_content(
         return emit_overview(display_path, content, &doc, dialect.links, format);
     };
 
-    // Reserved addresses are matched before the heading tree: they name parts of
-    // the file the tree cannot reach — frontmatter sits above the body, and the
-    // link list is an index over it, not a region of it. A heading that slugs to
-    // one of these names stays reachable by its numeric address. The precedence
-    // is absolute (`fm` must not change meaning the day someone adds a
-    // frontmatter block), so a live collision is announced rather than resolved:
-    // see [`announce_shadow`] and [`shadow`]. [`reserved_reading`] is the one
-    // place that says which addresses these are; `Reading::Text` still reaches
-    // its node through [`emit_section`], because the lede is a node of the
-    // document even though its address is reserved.
+    // Reserved addresses are matched before the heading tree, since they name
+    // parts of the file the tree cannot reach. A heading that slugs to one of
+    // them stays reachable by its numeric address, and the collision is
+    // announced rather than resolved.
     match reserved_reading(addr) {
         Some(Reading::Fm(which)) => {
             let out = emit_frontmatter(display_path, content, &doc, addr, which, format);

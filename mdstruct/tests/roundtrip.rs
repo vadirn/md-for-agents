@@ -1,7 +1,5 @@
-//! The intrinsic freeze gate over the mandatory fixtures,
-//! plus golden interior-span assertions that tiling and inline fidelity cannot
-//! see. Fixtures are embedded byte literals (not on-disk .md) so a markdown
-//! formatter cannot mangle CRLF/BOM/closing-hash bytes.
+//! The freeze gate over the mandatory fixtures, plus golden interior-span
+//! assertions that tiling and inline fidelity cannot see.
 
 use mdstruct::{Node, Options, parse, verify_spans};
 
@@ -15,7 +13,6 @@ fn slice(src: &str, span: mdstruct::Span) -> &str {
     &src[span.start..span.end]
 }
 
-/// The §2 worked example (LF, ASCII). Golden interior-span semantics.
 #[test]
 fn example_interior_spans() {
     let src = "---\ntitle: Example\n---\n# Guide\n\nText [link](https://x.io) and [[Note#Sec|alias]].\n\n## Setup\n\n```rust\nlet x = 1;\n```\n";
@@ -87,10 +84,6 @@ fn example_interior_spans() {
     }
 }
 
-/// 1.1 table-cell backlinks: a plain wikilink and an embed inside GFM cells are
-/// emitted (the `in_table` guard and whole-table mask no longer suppress them),
-/// the freeze gate passes (the oracle exempts cell wikilinks), and the consumer
-/// reads decoded `target`/`alias` rather than the imprecise span.
 #[test]
 fn table_cell_wikilink_and_embed() {
     let src =
@@ -115,9 +108,6 @@ fn table_cell_wikilink_and_embed() {
     assert_eq!(wl("Gamma"), Some((Some("display".to_string()), false)));
 }
 
-/// 1.1 empty-pipe `[[X|]]`: pipe present, empty display. `alias` is `Some("")`,
-/// distinct from a no-pipe `[[X]]` whose `alias` is `None` — the distinction a
-/// raw `alias_span` (present as `Some(page)` for no-pipe links) cannot carry.
 #[test]
 fn empty_pipe_wikilink() {
     let src = "See [[Topic|]] and [[Topic]].\n";
@@ -133,7 +123,6 @@ fn empty_pipe_wikilink() {
     assert_eq!(aliases, vec![Some(String::new()), None]);
 }
 
-/// Cyrillic-terminal block: the exclusive-end arithmetic must not overshoot.
 #[test]
 fn cyrillic_terminal() {
     let src = "## Заметка\n\nтекст [[Ссылка]] конец\n";
@@ -145,7 +134,6 @@ fn cyrillic_terminal() {
     assert!(slice(src, wl.span()).starts_with("[[") && slice(src, wl.span()).ends_with("]]"));
 }
 
-/// CRLF: the freeze gate holds; `\r` lives in the inter-block gap.
 #[test]
 fn crlf() {
     let src = "# Title\r\n\r\nA paragraph with [[Note]].\r\n";
@@ -157,7 +145,6 @@ fn crlf() {
     assert_eq!(slice(src, wl.span()), "[[Note]]");
 }
 
-/// Leading BOM: the gate holds (BOM is treated as ignorable in the leading gap).
 #[test]
 fn bom() {
     let src = "\u{feff}# Heading\n\nbody\n";
@@ -172,7 +159,6 @@ fn bom() {
     verify_spans(&d, src).expect("freeze gate must pass with a leading BOM");
 }
 
-/// Unclosed frontmatter: no frontmatter recognized, body starts at line 1.
 #[test]
 fn unclosed_frontmatter() {
     let src = "---\ntitle: x\n# Not closed\n\nbody\n";
@@ -182,7 +168,6 @@ fn unclosed_frontmatter() {
     assert_eq!(d.frontmatter.body_start_byte, 0);
 }
 
-/// ATX closing-hash: comrak strips the trailing `##`; textSpan excludes it.
 #[test]
 fn closing_hash() {
     let src = "## Foo ##\n\nbody\n";
@@ -192,7 +177,6 @@ fn closing_hash() {
     assert_eq!(slice(src, h.text_span), "Foo");
 }
 
-/// Setext heading: level 1, setext flag set, text on the line above the rule.
 #[test]
 fn setext() {
     let src = "Title\n=====\n\nbody\n";
@@ -203,7 +187,6 @@ fn setext() {
     assert_eq!(slice(src, h.text_span), "Title");
 }
 
-/// Nested/overlapping regions: the region-slice check holds, both emitted.
 #[test]
 fn nested_regions() {
     let src = "<!-- outer -->\n<!-- inner -->\ncontent\n<!-- /inner -->\n<!-- /outer -->\n";
@@ -218,7 +201,6 @@ fn nested_regions() {
     assert_eq!(slice(src, inner.body_span), "content\n");
 }
 
-/// Link reference definition (`[^n]: url`) is recovered as a located node.
 #[test]
 fn link_reference_definition_recovered() {
     let src = "See the note.\n\n[^1]: https://example.com/x\n";
@@ -231,10 +213,6 @@ fn link_reference_definition_recovered() {
     assert_eq!(slice(src, lrd.span()), "[^1]: https://example.com/x");
 }
 
-/// A file whose only bytes are a leading BOM (optionally + whitespace) tiles as
-/// an all-ignorable document — the BOM leads the otherwise-empty trailing region
-/// — so the gate passes, consistent with a whitespace-only file and with no
-/// `uncovered` node emitted.
 #[test]
 fn bom_only_file_passes_gate() {
     for src in ["\u{feff}", "\u{feff}\n\n  \n", "\u{feff}   \n"] {
@@ -250,9 +228,6 @@ fn bom_only_file_passes_gate() {
     }
 }
 
-/// Backslash parity in the embed-escape guard: one backslash escapes `!` (a
-/// genuine wikilink, `embed:false`); two backslashes leave a live `!` (a genuine
-/// embed). A single-byte lookbehind would drop the two-backslash embed.
 #[test]
 fn embed_escape_backslash_parity() {
     use mdstruct::Inline;
@@ -277,8 +252,6 @@ fn embed_escape_backslash_parity() {
     );
 }
 
-/// 1.3 `*x*`/`**x**`: byte-exact spans for the star delimiter family. Neither
-/// run nests here, so each variant has exactly one match.
 #[test]
 fn emph_and_strong_star_delimiter() {
     let src = "Some *emphasis* and **strong** here.\n";
@@ -297,9 +270,6 @@ fn emph_and_strong_star_delimiter() {
     assert_eq!(slice(src, strong.span()), "**strong**");
 }
 
-/// 1.3 `_x_`/`__x__`: the underscore delimiter family. Both runs sit flanked
-/// by spaces (not intraword), so CommonMark treats them as emphasis rather
-/// than literal underscores.
 #[test]
 fn emph_and_strong_underscore_delimiter() {
     let src = "Some _underscore_ and __underscore strong__ here.\n";
@@ -318,13 +288,6 @@ fn emph_and_strong_underscore_delimiter() {
     assert_eq!(slice(src, strong.span()), "__underscore strong__");
 }
 
-/// 1.3 ticket specimen: a GFM cell containing `*b*` used to leave an empty
-/// `inlines: []` (Emph/Strong were dropped into the catch-all along with
-/// Text/SoftBreak/LineBreak/Strikethrough/HtmlInline). Inside a table cell
-/// comrak's inline sourcepos can shift, so the shape oracle exempts cell
-/// Emph/Strong (verify.rs) the same way it exempts cell wikilinks; this test
-/// asserts presence rather than an exact byte span, mirroring
-/// `table_cell_wikilink_and_embed` above.
 #[test]
 fn table_cell_emphasis_is_emitted() {
     let src = "| a | b |\n| --- | --- |\n| *b* | c |\n";
@@ -341,12 +304,6 @@ fn table_cell_emphasis_is_emitted() {
     );
 }
 
-/// 1.3 nesting: `***both***` is an outer `Emph` (three-star run) wrapping an
-/// inner `Strong` (two-star run) — comrak, not this crate, decides which of
-/// the two wraps the other. This is the regression case for the verify oracle
-/// (verify.rs `is_emph_delim`): the outer node's slice opens on THREE `*`, so
-/// an `Emph` predicate that tested run length (expecting exactly one
-/// delimiter) rather than the delimiter character would reject it.
 #[test]
 fn nested_emph_strong_triple_asterisk() {
     let src = "Some ***both*** here.\n";
@@ -367,11 +324,6 @@ fn nested_emph_strong_triple_asterisk() {
     assert!(emph.span().start <= strong.span().start && strong.span().end <= emph.span().end);
 }
 
-/// 1.3 negative: Text, SoftBreak, LineBreak, Strikethrough, and HtmlInline all
-/// stay off `inlines[]` — `collect_inlines`'s catch-all `_ => {}` arm still
-/// drops every one of them (only Emph/Strong graduated out of it). One
-/// fixture exercises all five: a soft-wrapped paragraph, a backslash hard
-/// break, `~~struck~~`, and an inline `<span>` tag.
 #[test]
 fn unemitted_inline_kinds_produce_no_inlines() {
     let src = "Line one\nline two.\n\nLine three\\\nline four.\n\n~~struck~~ text.\n\nInline <span>tag</span> here.\n";

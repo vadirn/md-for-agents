@@ -1,92 +1,9 @@
-//! The block-level passthrough printer and the partition oracle that gates it.
+//! The block-level passthrough printer, and the partition oracle gating it.
 //!
-//! # What the printer is
-//!
-//! [`reassemble`] emits, in source order, the original bytes of every
-//! top-level block span plus the bytes between spans. It normalizes nothing,
-//! because it never asks comrak to render: comrak's own printer
-//! reads `sourcepos` in zero places, so a sourcepos-driven passthrough
-//! inherits none of comrak's rewrites. Constructs the parser does not model —
-//! footnote definitions (`extension.footnote` is deliberately off), `$…$` and
-//! `$$…$$` math, `> [!Note]` callouts, `#tags`, `[[wikilinks]]` — survive as
-//! the bytes they are, inside whatever paragraph or block quote claims them.
-//!
-//! # Why reassembly is not the oracle
-//!
-//! [`reassemble`] keeps a cursor: for each block it emits the gap before the
-//! block, then the block, then advances. That emits bytes `0..len` exactly
-//! once in source order **whatever the spans are** — the gap slice absorbs
-//! any boundary error, so `reassemble(src, blocks) == src` holds for a span
-//! set shortened by one byte per block just as it does for the true one. An
-//! earlier scan of this corpus made exactly that mistake and had to discard the
-//! result. `reassembly_alone_misses_what_the_partition_catches`
-//! keeps the trap documented as a live assertion.
-//!
-//! [`crate::Partition`] therefore does not compute the comparison at all. It
-//! used to, as a second conjunct of `passed()`, which made a verdict resting
-//! wholly on [`check_partition`] read as though it rested on two things. The
-//! conjunct could not fail, so removing it changed no file's verdict; what it
-//! changed is that no reader has to work out that it never could.
-//!
-//! The key check is [`check_partition`]: every non-whitespace byte of
-//! the input lies in **exactly one** block span, no two spans overlap, and no
-//! span reaches past the end of the input. That is the property a *later*
-//! milestone needs. When a formatter rewrites one block — table padding, list
-//! marker unification — it splices the replacement over that block's range and
-//! leaves every other byte alone; only a partition guarantees the splice
-//! neither drops nor duplicates the rest of the file.
-//!
-//! # Scope: one span per top-level block
-//!
-//! [`block_spans`] emits exactly one span per child of the document root, and
-//! never a second span for anything nested inside one — a list's span already
-//! covers its items, so claiming the items too would be an overlap. It does
-//! read the *extent* of nested blocks, because comrak's container sourcepos
-//! can truncate (see below), but it never reads inlines, whose spans carry
-//! known defects a block-level printer has no reason to inherit: an inline in
-//! a table cell shifts one byte left per preceding `\|` in that cell, because
-//! comrak unescapes before inline parsing.
-//!
-//! # Two things comrak's block sourcepos will not give you
-//!
-//! **A container's end can fall short of its content.** An indented code block
-//! inside a list item truncates the spans of everything containing it: in
-//! one corpus file the list at line 74 reports `74:1-83:9`, ending on the
-//! *ninth column* of a line whose content runs to line 86, and the offending
-//! item's own code block reports the empty range `76:9-76:9`. Taking the
-//! container's sourcepos at face value leaves 179 bytes of real content in no
-//! span at all. [`block_spans`] therefore expands each top-level span to the
-//! union of its own range and the ranges of its **block** descendants, which
-//! is what `mdstruct::core::build::expand` does for the same reason. The union
-//! recovers those bytes because the last item's spans are correct even when
-//! its siblings' are not.
-//!
-//! That condition is also the repair's limit: it needs *some* later block
-//! descendant to report a correct end. Put the indented code block in the LAST
-//! list item and follow the list with a top-level block, and comrak reports
-//! that code block as an empty range too — no correct end is left to borrow,
-//! and the union recovers nothing.
-//! `an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered`
-//! holds that shape open as an asserted failure, with the same list at EOF as
-//! its passing control. Corpus exposure is zero: comrak finds 8 indented code
-//! blocks across the 1052-file corpus, spread over two files, and every one
-//! has a later sibling to borrow from.
-//!
-//! **Link reference definitions vanish.** comrak consumes them without
-//! emitting a node, so their bytes belong to no span:
-//! `"[a]: https://x.io\n\nbody\n"` yields a single paragraph covering `body`
-//! alone. This is not theoretical for a corpus that keeps bibliographies as
-//! footnote definitions — `[^1]: https://x.io` is a *valid* link reference
-//! definition (label `^1`, destination `https://x.io`) and is deleted, while
-//! `[^1]: Author, Title, 2020` is not one and survives as a paragraph. Four
-//! operative corpus files depend on the difference. [`block_spans`] models the
-//! dropped lines as `linkReferenceDefinition` blocks so the printer emits
-//! them; the recognition is line-exact and shape-checked
-//! ([`opens_link_reference_definition`]), never a blanket tolerance for
-//! unclaimed bytes, so the injection the oracle exists to catch still fails.
-//! `mdstruct` covers the same gaps in `fill_gaps`, but with a synthetic node
-//! for *any* unclaimed content, which is the tolerance this deliberately
-//! avoids.
+//! The printer emits each top-level block's original bytes plus the bytes
+//! between blocks, normalizing nothing. The oracle checks that those spans
+//! partition the source, since reassembly alone cannot detect content that
+//! landed in no span.
 
 use comrak::nodes::{AstNode, NodeValue, Sourcepos};
 
@@ -153,7 +70,7 @@ pub fn block_kind(value: &NodeValue) -> &'static str {
 /// [`crate::comrak_options`]; the spans are meaningless against any other
 /// text. Each span is the union of the block's own sourcepos and those of its
 /// block descendants, because a container's reported end can fall short of its
-/// content (see the module docs). Returns **all** position errors rather than
+/// content. Returns all position errors rather than
 /// the first, since a desynced index tends to break every node after it and
 /// one error would hide the pattern.
 ///
@@ -229,19 +146,9 @@ pub fn block_spans<'a>(root: &'a AstNode<'a>, source: &str) -> Result<Vec<Block>
 /// Claim the lines comrak deleted as link reference definitions.
 ///
 /// Deliberately narrow, because every byte this claims is a byte the oracle
-/// stops checking. A line is claimed only when **all** of these hold: no block
-/// covers any part of it, and its text opens a link reference definition per
-/// [`opens_link_reference_definition`]. One block per line, spanning that
-/// line's content only. A leaked byte from a mis-measured span shares a line
-/// with the span that leaked it, so it can never satisfy the first condition —
-/// which is why this can coexist with the one-byte-shortening injection test.
-///
-/// A definition whose destination sits on a following line leaves that line
-/// unclaimed and the file failing. Corpus exposure is zero, and inventing a
-/// continuation rule would widen exactly the tolerance this keeps narrow.
-/// `a_link_reference_definition_with_a_continued_destination_loses_its_destination`
-/// asserts that failure rather than leaving it as a comment, so widening the
-/// fill has to break a test first.
+/// stops checking. A line is claimed only when no block covers any part of it
+/// and its text opens a definition. A definition whose destination sits on a
+/// following line leaves that line unclaimed and the file failing.
 fn fill_dropped_link_reference_definitions(source: &str, idx: &LineIndex, blocks: &mut Vec<Block>) {
     let depth = depth_map(source.len(), blocks);
     if depth.iter().all(|&d| d > 0) {
@@ -466,9 +373,9 @@ pub fn check_partition(source: &str, blocks: &[Block]) -> PartitionReport {
 /// Reassemble `source` from `blocks`: each block's own bytes, plus the bytes
 /// between blocks, in source order.
 ///
-/// This is the printer. It is also, on its own, a **vacuous** fixpoint check —
-/// see the module docs. Run [`check_partition`] for the claim that actually
-/// constrains the spans.
+/// This is the printer. On its own it is a vacuous fixpoint check, since it
+/// returns its input for any span set. Run [`check_partition`] for the claim
+/// that actually constrains the spans.
 pub fn reassemble(source: &str, blocks: &[Block]) -> String {
     let mut ordered: Vec<&Block> = blocks.iter().collect();
     ordered.sort_by_key(|b| (b.start, b.end));

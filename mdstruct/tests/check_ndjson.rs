@@ -1,14 +1,9 @@
-//! CLI-level coverage for `check`'s scoped dangling-anchor channel (plan A5):
-//! the `--region` scope filter, the human `warn:` default, and the machine
-//! `--format ndjson` records. Drives the compiled binary over stdin so the
-//! stream contract (records on stdout, summary on stderr) is exercised end to
-//! end. `CARGO_BIN_EXE_mdstruct` is set by Cargo for integration tests.
+//! CLI coverage for `check`'s scoped dangling-anchor channel: the `--region`
+//! scope filter, the human `warn:` default, and the `--format ndjson` records.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-/// Run `mdstruct check <args...>` with `stdin` as the sole input (`-`).
-/// Returns (exit_code, stdout, stderr).
 fn run_check(args: &[&str], stdin: &str) -> (i32, String, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_mdstruct"));
     cmd.arg("check");
@@ -33,8 +28,6 @@ fn run_check(args: &[&str], stdin: &str) -> (i32, String, String) {
     )
 }
 
-/// (a) One unpaired open, scoped to its label with `--format ndjson`, emits
-/// exactly one well-formed record carrying `type=unpaired-open`.
 #[test]
 fn scoped_ndjson_emits_one_unpaired_open_record() {
     let src = "<!-- interact -->\nbody with no close\n";
@@ -58,8 +51,6 @@ fn scoped_ndjson_emits_one_unpaired_open_record() {
     assert_eq!(rec["line"], 1);
 }
 
-/// (b) Bare `check` (no `--region`) is silent on dangling anchors: nothing on
-/// stdout, no `warn:` line on stderr, even with an unpaired open present.
 #[test]
 fn bare_check_is_silent_on_dangling() {
     let src = "<!-- interact -->\nbody with no close\n";
@@ -73,9 +64,6 @@ fn bare_check_is_silent_on_dangling() {
     );
 }
 
-/// (d) Scoped human path: `--region <label>` without `--format ndjson` writes a
-/// `warn:` line to stderr (not stdout) for a matching dangling anchor, and does
-/// not change the exit code. This is the default (human) counterpart to (a).
 #[test]
 fn scoped_human_path_warns_on_stderr() {
     let src = "<!-- interact -->\nbody with no close\n";
@@ -89,7 +77,6 @@ fn scoped_human_path_warns_on_stderr() {
     );
 }
 
-/// (c) An unpaired close under `--region` maps to `type=unpaired-close`.
 #[test]
 fn scoped_ndjson_maps_unpaired_close() {
     let src = "prose\n\n<!-- /interact -->\n";

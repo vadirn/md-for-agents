@@ -1,11 +1,5 @@
-//! Table padding: the properties the rewrite claims, and the corpus specimens
-//! that decide its open questions.
-//!
-//! Every fixture is an embedded byte literal, for the same reason
-//! the negative-control suite's are: a specimen on disk is one formatting pass
-//! away from being rewritten into something that no longer reproduces the shape
-//! under test — and the shapes here are *made of whitespace*, so that risk is at
-//! its worst.
+//! Table padding: the properties the rewrite claims, and the specimens that
+//! decide its open questions.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -38,15 +32,6 @@ fn accept(source: &str) -> String {
     }
 }
 
-/// The claim the whole design rests on: a `TableCell`'s sourcepos names the
-/// cell's **source** bytes, escapes intact — unlike the inline nodes beneath it,
-/// which comrak shifts one byte left per preceding `\|` because it unescapes
-/// before inline parsing.
-///
-/// If this ever stopped holding, measuring a cell's width from its source would
-/// silently measure the wrong bytes, and no oracle here would notice — the
-/// width is the transformation's own choice. So it is pinned against a real
-/// parse rather than assumed.
 #[test]
 fn a_table_cells_sourcepos_is_byte_exact_with_escapes_intact() {
     let src = utf8(b"| a \\| b | c |\n| --- | --- |\n| x\\|y | z |\n");
@@ -85,17 +70,6 @@ fn a_table_cells_sourcepos_is_byte_exact_with_escapes_intact() {
     );
 }
 
-/// The corpus's only alignment specimen, padded by
-/// hand: a left-aligned first column and two right-aligned ones, whose cells are
-/// padded on the **left**. The rewrite must reproduce it byte for byte, which is
-/// simultaneously a fixpoint claim and the strongest available evidence that the
-/// width measure, the minimum width, the alignment side, and the delimiter's
-/// colon placement all match what a human wrote.
-///
-/// Its trailing column is right-aligned, so the exemption never reaches it and
-/// the header-width delimiter rule never reaches it either: every column here,
-/// delimiter included, is sized by the widest cell. That is what makes it the
-/// one corpus table the exemption leaves standing.
 #[test]
 fn the_corpus_alignment_specimen_is_reproduced_byte_for_byte() {
     let src = utf8(
@@ -111,10 +85,6 @@ fn the_corpus_alignment_specimen_is_reproduced_byte_for_byte() {
     assert_eq!(p.tables_changed, 0);
 }
 
-/// The same table with every cell squeezed to one space: padding must rebuild
-/// exactly the specimen above. This is the causal control for the test before
-/// it — that one shows the normal form is a fixpoint, this one shows the normal
-/// form is *reachable*, and together they show the two are the same bytes.
 #[test]
 fn squeezing_the_alignment_specimen_and_repadding_restores_it() {
     let squeezed = utf8(
@@ -132,15 +102,6 @@ fn squeezing_the_alignment_specimen_and_repadding_restores_it() {
     assert_eq!(accept(squeezed), expected);
 }
 
-/// The corpus's only ragged table, reduced to its operative row
-/// a cell holding an
-/// unescaped `|` **inside a code span**, which GFM splits on anyway. comrak
-/// drops the excess cell from the tree and leaves its bytes on the line, so an
-/// AST-driven padder would delete them.
-///
-/// The chosen policy is to decline the table whole. What matters is that the
-/// choice is visible: the table comes back byte-identical and the skip is
-/// reported, rather than the rewrite quietly doing something to it.
 #[test]
 fn the_corpus_ragged_specimen_is_declined_and_left_verbatim() {
     let src = utf8(
@@ -175,8 +136,6 @@ fn the_corpus_ragged_specimen_is_declined_and_left_verbatim() {
     ));
 }
 
-/// The other direction of raggedness, which comrak hides the opposite way: a
-/// short row gains a phantom cell whose sourcepos is the row's trailing pipe.
 #[test]
 fn a_short_row_is_declined_too_and_comrak_puts_its_phantom_cell_on_the_pipe() {
     let src = utf8(b"| a | b | c |\n| --- | --- | --- |\n| 1 | 2 |\n");
@@ -203,8 +162,6 @@ fn a_short_row_is_declined_too_and_comrak_puts_its_phantom_cell_on_the_pipe() {
     ));
 }
 
-/// A table whose delimiter row is the only thing that changes still passes the
-/// oracle, because the delimiter's dash count is its one exemption.
 #[test]
 fn widening_only_the_delimiter_row_is_permitted() {
     // The trailing column's cells are exempt from fill, but its delimiter run
@@ -217,15 +174,6 @@ fn widening_only_the_delimiter_row_is_permitted() {
     );
 }
 
-/// The trailing-column exemption, stated over the four alignments it turns on.
-///
-/// A trailing column whose alignment is absent or left carries fill that
-/// nothing reads: the only thing it separates the content from is the closing
-/// pipe. A trailing column that is right- or center-aligned carries fill that
-/// *is* the alignment, so it keeps it. Everything before the last column is
-/// padded either way. Where the exemption takes the cell fill it also takes the
-/// delimiter's width from the **header** rather than from the column, so the
-/// dash run matches the cell printed directly above it.
 #[test]
 fn a_trailing_unaligned_column_is_left_unpadded() {
     let src = utf8(b"| Term | Definition |\n| --- | --- |\n| a | a long definition |\n");
@@ -265,9 +213,6 @@ fn a_trailing_center_aligned_column_keeps_its_padding() {
     );
 }
 
-/// A one-column table is all trailing column, so the exemption either takes the
-/// whole table or none of it. Unaligned, cells are left unpadded and an
-/// already-3-wide delimiter is a fixpoint; right-aligned, every cell is.
 #[test]
 fn a_single_column_table_is_all_trailing_column() {
     let bare = utf8(b"| Key |\n| --- |\n| a |\n");
@@ -281,17 +226,6 @@ fn a_single_column_table_is_all_trailing_column() {
     assert_eq!(accept(aligned), "| Only |\n| ---: |\n|    a |\n");
 }
 
-/// **The counter-evidence, pinned.** The exemption is not free: a table padded
-/// by hand in the shape the uncapped padder produced — trailing column filled
-/// to its width — is no longer a fixpoint. It loses the trailing cell fill
-/// *and* the part of the delimiter run that reached past the header: `value `
-/// gives back its one space, and the six dashes under it come back to the five
-/// `value` occupies.
-///
-/// This is the shape most of the corpus's hand-padded tables are in, so this
-/// test is the specimen behind "tables that were byte-exact fixpoints now
-/// change". It is asserted here rather than left to a dry run, because the cost
-/// of the rule should fail loudly if anyone tries to argue it away.
 #[test]
 fn a_hand_padded_trailing_column_loses_its_padding() {
     let src = utf8(b"| key | value  |\n| --- | ------ |\n| a   | longer |\n");
@@ -307,14 +241,6 @@ fn a_hand_padded_trailing_column_loses_its_padding() {
     assert_eq!(p.tables_changed, 1);
 }
 
-/// **The rule this change is for, pinned directly.** A trailing header cell
-/// far narrower than the widest body cell in its column: the dash run follows
-/// the header, not the column.
-///
-/// The shape is `home/agents/skills/basecamp/SKILL.md`'s reduced to its
-/// operative columns — a `Format` header over a 95-wide body cell, where the
-/// old rule put 95 dashes under a 6-wide word and made the delimiter line more
-/// than twice the header line.
 #[test]
 fn the_trailing_delimiter_follows_the_header_and_not_the_column() {
     let src = utf8(
@@ -336,8 +262,6 @@ fn the_trailing_delimiter_follows_the_header_and_not_the_column() {
     );
 }
 
-/// The floor still wins under the new rule: a trailing header narrower than
-/// three leaves three dashes, so `---` (and every alignment marker pair) fits.
 #[test]
 fn a_trailing_header_narrower_than_three_still_gets_three_dashes() {
     let src = utf8(b"| Key | x |\n| --- | - |\n| a | a much longer cell |\n");
@@ -354,11 +278,6 @@ fn a_trailing_header_narrower_than_three_still_gets_three_dashes() {
     );
 }
 
-/// The claim that makes the exemption cheap: it never narrows a table, and it
-/// never widens one either. The widest line is the row holding the widest
-/// trailing cell, and that cell had no fill to lose — so the maximum line width
-/// is identical with the exemption and without it, and only the shorter rows
-/// get shorter.
 #[test]
 fn the_exemption_leaves_the_widest_line_where_the_uncapped_form_had_it() {
     let src = utf8(b"| key | value |\n| --- | --- |\n| a | longer |\n| bb | x |\n");
@@ -377,9 +296,6 @@ fn the_exemption_leaves_the_widest_line_where_the_uncapped_form_had_it() {
     );
 }
 
-/// Padding is idempotent: applying it to its own output changes nothing. A
-/// width rule that read its own padding — measuring the raw cell instead of the
-/// trimmed one — would fail here on the second pass and nowhere else.
 #[test]
 fn padding_is_idempotent() {
     for src in [
@@ -404,8 +320,6 @@ fn padding_is_idempotent() {
     }
 }
 
-/// The rewrite is whitespace-only outside the delimiter rows, stated as a
-/// property over the specimens rather than read off any one diff.
 #[test]
 fn no_non_whitespace_byte_moves_outside_a_delimiter_row() {
     for src in [
@@ -428,9 +342,6 @@ fn no_non_whitespace_byte_moves_outside_a_delimiter_row() {
     }
 }
 
-/// The oracle is not vacuous. Hand it an "after" that changed a non-whitespace
-/// byte on an ordinary line, and it must say so — otherwise the guard the
-/// rewrite ships behind would pass on anything.
 #[test]
 fn the_whitespace_oracle_rejects_a_changed_content_byte() {
     let before = utf8(b"| a | b |\n| --- | --- |\n| 1 | 2 |\n");
@@ -442,8 +353,6 @@ fn the_whitespace_oracle_rejects_a_changed_content_byte() {
     assert_eq!(v.line, 3);
 }
 
-/// And it distinguishes the delimiter row's dash count, which is exempt, from
-/// its colons, which are not.
 #[test]
 fn the_whitespace_oracle_exempts_dashes_but_not_colons() {
     let before = utf8(b"| a | b |\n| :-- | --- |\n| 1 | 2 |\n");
@@ -462,9 +371,6 @@ fn the_whitespace_oracle_exempts_dashes_but_not_colons() {
     assert_eq!(v.kind, PadViolationKind::DelimiterMarkers);
 }
 
-/// A cell whose interior spacing changed keeps its non-whitespace bytes, so the
-/// per-line check cannot see it. The cell check is what does, and this is the
-/// specimen that separates the two.
 #[test]
 fn the_cell_oracle_catches_what_the_line_check_cannot() {
     let before = utf8(b"| a  b | c |\n| --- | --- |\n| 1 | 2 |\n");
@@ -485,38 +391,6 @@ fn the_cell_oracle_catches_what_the_line_check_cannot() {
     assert_eq!(v.line, 1);
 }
 
-/// **The whole-document guards, and the claim that nothing reaches them.**
-///
-/// `pad` carries two verdicts a caller can read apart: `skipped`, one table the
-/// rewrite declined, and `structure`/`violation`, the whole document refused.
-/// Every declining fixture in this crate exercises the first. This one states
-/// what could not be turned into a fixture: **no input reaches the second**.
-///
-/// That is a claim about reachability, and it is asserted rather than assumed
-/// because both readings of the silence are live. Either the guards are silent
-/// because the rewrite is faithful — the reading this test pins — or they are
-/// silent because they are wired to something that cannot move, which is the
-/// vacuous-guard failure this crate has shipped three times. The refutation of
-/// the second reading lives in the table negative controls, which hands the
-/// same oracles hand-built wrong padders and gets a refusal every time. So the
-/// guards can fail; nothing here makes them.
-///
-/// And the distance between the two readings is one character class, measured:
-/// trimming a cell with `trim()` instead of `trim_matches(' ')` eats the tab in
-/// `tab-at-cell-edge`, the parse changes, and the rule refuses the whole
-/// document — 182 of the crate's 183 tests still pass, and the one that fails is
-/// this one. A padder that starts declining every document holding a tab in a
-/// cell is a formatter that quietly stops formatting, and until this fixture
-/// nothing in the crate would have said so.
-///
-/// The specimens are the shapes a whole-document refusal would most plausibly
-/// come from: carriage returns the pipeline would have removed but `check` hands
-/// this rule intact, whitespace that is not a space, escapes at a cell edge,
-/// containers, tables with no outer pipes, and the two raggedness directions.
-/// Each is either padded, or declined **one table at a time** — which is the
-/// distinction the report makes and the bytes do not, since a document left
-/// verbatim by an exemption and one left verbatim by a refusal are the same
-/// document.
 #[test]
 fn every_refusal_this_rule_makes_is_one_table_and_not_the_document() {
     // (name, source). A `\r` here is deliberate: `check` runs every rule on the
@@ -622,9 +496,6 @@ fn every_refusal_this_rule_makes_is_one_table_and_not_the_document() {
     );
 }
 
-/// Every node's sourcepos in a document, root excluded — the root's own start
-/// column is 1 whatever precedes it, so it is the one node the invariant below
-/// does not describe.
 fn positions(src: &str) -> Vec<(&'static str, Sourcepos)> {
     let arena = Arena::new();
     mdformat::parse_with(&arena, src, &opts(), |root| {
@@ -638,36 +509,6 @@ fn positions(src: &str) -> Vec<(&'static str, Sourcepos)> {
     })
 }
 
-/// The boundary of the byte order mark's reach, pinned in both directions.
-///
-/// A mark occupies three bytes of line 1 and of no other line. So a marked
-/// document's sourcepos must equal the unmarked document's with three added to
-/// every column reported **on line 1**, and nothing added anywhere else. That
-/// is the whole invariant, and it is what the crate's spans, widths and splices
-/// all rest on.
-///
-/// comrak breaks it inside a table that opens on line 1: it anchors every row
-/// and every cell at the table's line-1 opening offset — the mark's bytes
-/// included — plus their offset within the row, so a body row two lines down is
-/// reported three columns right of where it is, and this specimen's last cell
-/// ran past the end of the file. [`mdformat::anchor`] repairs that by
-/// re-anchoring each row at its own line's opening; this holds the repair to the
-/// boundary from the mark's side, where the carry is a known three bytes and the
-/// arithmetic can be checked by hand.
-///
-/// Both directions carry weight, and each part of the boundary has a specimen
-/// here that reddens when it is dropped:
-///
-/// - Repairing too little leaves a later line three columns right.
-/// - Repairing a column on the table's **opening line** moves one where the
-///   mark's bytes really do sit. The `table-on-line-1` specimen catches that.
-/// - Repairing a `Table`'s or a `TableRow`'s own `end` moves one comrak measures
-///   from the line it lands on rather than from the anchor. Two columns and two
-///   body rows are what make that visible; a one-row or one-column table cannot
-///   separate it from the start columns.
-/// - Repairing a table that opens on a **later** line, where the mark is on no
-///   line the table spans, must be the identity. The `table-after-a-paragraph`
-///   specimen is there for that alone.
 #[test]
 fn a_byte_order_mark_shifts_only_line_one_columns_inside_a_table() {
     // (name, the unmarked document). Each is prefixed with the mark to make the

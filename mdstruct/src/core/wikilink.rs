@@ -1,9 +1,9 @@
-//! Decompose comrak's one opaque `WikiLink.url` into `{page, heading, block}`
-//! (comrak gap #4). The fragment conventions (`#heading`, `#^block`) are
-//! PKM-flavored — those fields come out `None` for sources that don't use them.
-//! Embed (`![[…]]`) is NOT recoverable here: comrak emits no WikiLink for it
-//! (the `!` opens an image, swallowing the inner `[[`), so a core pre-pass sets
-//! `embed`; this module never sees embeds.
+//! Decomposes comrak's opaque `WikiLink.url` into `{page, heading, block}`.
+//!
+//! The fragment conventions (`#heading`, `#^block`) are PKM-flavored, so those
+//! fields are `None` for sources that do not use them. Embeds never reach here:
+//! comrak emits no WikiLink for `![[…]]`, since the `!` opens an image and
+//! swallows the inner `[[`, so a pre-pass flags them instead.
 
 /// The `{page, heading, block}` decomposition of a wikilink target.
 #[derive(Debug, Clone, PartialEq, Eq)]

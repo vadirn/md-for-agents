@@ -23,11 +23,10 @@ pub(crate) enum ResolveError {
 /// `resolve_address` wraps this to format the error; tests call it directly so
 /// there is no parallel test mirror to drift.
 pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, ResolveError> {
-    // `[0]` / `text` → the synthetic text node. Reserved, like `fm` and `links`:
-    // matched before the heading tree, so a heading slugging to `text` is
-    // reachable only by its number. `resolve_address` says so on the miss. The
-    // predicate is `shadow`'s, so the interception and the announcement cannot
-    // drift over which addresses the text reading owns.
+    // `[0]` / `text` → the synthetic text node. Reserved, like `fm` and
+    // `links`, so a heading slugging to `text` is reachable only by its number.
+    // The predicate is `shadow`'s, so interception and announcement cannot
+    // drift apart.
     if crate::shadow::reserved_reading(address) == Some(crate::shadow::Reading::Text) {
         return doc
             .text

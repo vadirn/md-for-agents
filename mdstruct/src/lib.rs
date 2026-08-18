@@ -1,8 +1,8 @@
-//! `mdstruct` — a shared comrak-backed markdown structural-parsing core.
+//! A shared comrak-backed markdown structural-parsing core.
 //!
 //! Locates structure and emits half-open byte spans; consumers slice their own
-//! original bytes and never restringify (byte-exact write-back preserved). The
-//! `#[derive(Serialize)]` shape of [`Document`] IS the JSON contract ([[mdstruct-plan]] §2).
+//! original bytes and never restringify, which keeps write-back byte-exact. The
+//! `#[derive(Serialize)]` shape of [`Document`] is the JSON contract.
 
 mod core;
 

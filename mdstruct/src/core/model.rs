@@ -1,29 +1,18 @@
 //! The pinned JSON structural-model schema.
 //!
-//! One envelope, camelCase on the wire, one `span` primitive (half-open UTF-8
-//! byte offsets serialized as a two-element array), `type` on every tagged node,
-//! headings in exactly one array, a `regions[]` overlay, no polymorphic fields,
-//! no emitted `raw` strings. The `#[derive(Serialize)]` representation IS the
-//! contract — a consumer deserializes exactly what a Rust `Document` serialized.
+//! camelCase on the wire, one `span` primitive (half-open UTF-8 byte offsets as
+//! a two-element array), `type` on every tagged node, headings in exactly one
+//! array, and no polymorphic fields. The `#[derive(Serialize)]` representation
+//! is the contract.
 
 use serde::{Serialize, Serializer, ser::SerializeTuple};
 
 use super::region::Dangling;
 
 /// Full `major.minor` schema contract version, carried in every envelope.
-/// 1.1 (additive-minor over 1.0): `Inline::Wikilink` gained `target` + `alias`
-/// so a consumer reconstructs `{target, alias}` off decoded strings instead of
-/// slicing the (table-cell-unreliable) span.
-/// 1.2 (recognition-only over 1.1, no wire-shape change): the region scanner
-/// gained an indented-code + multi-line-HTML-comment mask. The bump is the
-/// deploy-skew handshake — a consumer that pins `"1.2"`
-/// fails loud against a stale binary emitting `"1.1"` instead of silently
-/// reading its pre-mask (phantom-region-prone) `regions[]`.
-/// 1.3 (additive-minor over 1.2): `inlines[]` gained `Inline::Emph` and
-/// `Inline::Strong`, so a consumer enumerates rendered emphasis off comrak's
-/// flanking-delimiter parse instead of hand-rolling CommonMark's rules over a
-/// block's bytes. A consumer that pins `"1.2"` reads a document whose emphasis
-/// is absent as one that has none.
+///
+/// A consumer pins it, so a stale binary emitting an older minor fails loud
+/// rather than silently reading a document missing what that minor added.
 pub const SCHEMA_VERSION: &str = "1.3";
 
 /// Half-open UTF-8 byte span `[start, end)` — the sole slicing primitive.

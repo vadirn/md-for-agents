@@ -1,31 +1,4 @@
-//! Specimens the partition oracle must **reject**.
-//!
-//! The partition fixtures assert the oracle passes on everything the corpus holds. That
-//! is only half a contract: an oracle that never fails passes those tests too,
-//! so a regression that silently disabled checking would read as green. These
-//! two specimens pin the failure path against a *real* parser defect rather
-//! than an injected one, which is what
-//! `shortening_every_span_by_one_byte_fails_the_partition`
-//! already covers.
-//!
-//! Both also demonstrate the trap the printer's module docs describe: the
-//! printer's output still equals its input, byte for byte, while content sits
-//! in no span at all. Reassembly equality is satisfied by exactly the span
-//! sets the oracle exists to refuse.
-//!
-//! Each specimen is an embedded byte literal, for the same reason
-//! the partition fixtures are: a specimen on disk is one formatting pass
-//! away from being rewritten into something that no longer reproduces the
-//! defect.
-//!
-//! # Neither is dead weight
-//!
-//! Both shapes are documented in the printer as the residual holes its two
-//! workarounds leave open, and neither workaround can be widened without
-//! widening the tolerance the oracle exists to withhold. Landing them as
-//! *asserted* failures fixes the boundary: the day either shape starts
-//! passing — a comrak release, a widened fill — a test fails and someone has
-//! to say why.
+//! Specimens the partition oracle must reject.
 
 use comrak::Arena;
 use comrak::nodes::NodeValue;
@@ -39,9 +12,6 @@ fn spans(source: &str) -> Vec<Block> {
     })
 }
 
-/// The single uncovered run of a report that has exactly one violation and it
-/// is `Uncovered`. Panics otherwise, so a failure for the *wrong* reason is
-/// never mistaken for the failure being asserted.
 fn sole_uncovered<'a>(source: &'a str, blocks: &[Block]) -> &'a str {
     let report = check_partition(source, blocks);
     assert!(
@@ -60,16 +30,6 @@ fn sole_uncovered<'a>(source: &'a str, blocks: &[Block]) -> &'a str {
     }
 }
 
-/// **Negative control (a).** `block_spans` repairs a container whose end
-/// comrak truncated by unioning in its block descendants' ranges — but that
-/// recovers the bytes only when some *later* descendant reports a correct end.
-/// Put the indented code block in the LAST list item and follow the list with
-/// a top-level block, and there is no later sibling to borrow a correct end
-/// from: the item's own code block reports an empty range, the list's end
-/// stops mid-line, and the code block's content lands in no span.
-///
-/// This is the minimal case that defeats the workaround, and the reason the
-/// workaround is documented as a partial repair rather than a fix.
 #[test]
 fn an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered() {
     let src = b"1. first\n2. last item text\n\n        indented code\n        more code\n\ntail paragraph\n";
@@ -115,12 +75,6 @@ fn an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered() {
     );
 }
 
-/// The causal control for the test above. Same list, same indented code block,
-/// same last item — with the trailing top-level paragraph removed. It passes.
-/// The single differing factor is therefore the trailing block, which is what
-/// forces comrak to close the code block by dedent and lose its range; with
-/// the list at EOF, comrak reports the code block correctly and the union has
-/// something true to work with.
 #[test]
 fn the_same_list_at_eof_passes_isolating_the_trailing_block_as_the_cause() {
     let src = b"- item one\n- last item:\n\n        code line one\n        code line two\n";
@@ -148,16 +102,6 @@ fn the_same_list_at_eof_passes_isolating_the_trailing_block_as_the_cause() {
     assert_eq!(report.content_bytes, report.covered_content_bytes);
 }
 
-/// **Negative control (b).** comrak deletes link reference definitions without
-/// emitting a node, and `fill_dropped_link_reference_definitions` claims the
-/// lines back — but only line-exactly, and only for a line that itself opens
-/// the definition. A definition whose destination sits on a continuation line
-/// leaves that line matching nothing, so the destination is unclaimed.
-///
-/// The fill stays narrow on purpose: every line it claims is a line the oracle
-/// stops checking, and a continuation rule would have to guess how far a
-/// definition runs. Corpus exposure is zero (see the printer), so this specimen
-/// records the cost of that choice rather than arguing against it.
 #[test]
 fn a_link_reference_definition_with_a_continued_destination_loses_its_destination() {
     let src = b"[a]:\nhttps://x.io\n\nbody\n";
@@ -185,9 +129,6 @@ fn a_link_reference_definition_with_a_continued_destination_loses_its_destinatio
     );
 }
 
-/// The causal control for the test above: fold the destination onto the
-/// opening line and the same definition passes. The differing factor is the
-/// line break, not the label or the URL.
 #[test]
 fn the_same_definition_on_one_line_passes() {
     let src = b"[a]: https://x.io\n\nbody\n";

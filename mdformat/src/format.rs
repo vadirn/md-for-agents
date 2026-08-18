@@ -1,148 +1,5 @@
-//! `format` — every rewriting rule in one pass, and the predicate that says a
-//! document is already in normal form.
-//!
-//! # The contract
-//!
-//! [`format`] is a **retraction onto a normal form**, which is two clauses:
-//!
-//! - **corrective** — [`Check::is_normal`] holds of `format(f)` for every `f`;
-//! - **fixpoint** — `format(f) == f` for every `f` of which `is_normal` already
-//!   holds.
-//!
-//! Together they give idempotence, which is why the two are stated separately
-//! rather than as "running it twice changes nothing": that formulation is
-//! satisfied by a rule that alternates between two forms on the first pass and
-//! settles on neither.
-//!
-//! # Why the predicate is derived from the rules, not written beside them
-//!
-//! Three of the four rules here **decline** some construct.
-//! [`crate::table::pad`] declines a ragged table, because comrak does not model
-//! raggedness and padding one would either delete a long row's overflow or
-//! materialize a short row's missing cell. [`crate::normalize`] declines any
-//! document whose gaps are undefined (the input fails the partition) or whose
-//! re-parse the rewrite would change. [`crate::markers`] declines two adjacent
-//! lists whose markers differ, because unifying them would splice two lists
-//! into one. ([`crate::endings`] declines nothing and can decline nothing — see
-//! below.)
-//!
-//! A hand-written predicate would have to reproduce that list, and the moment
-//! it fell out of step the corrective clause would fail on every file holding a
-//! declined construct — and the failure would be the predicate's, not the
-//! rule's. So the predicate is not written beside the rule at all. It **is** the
-//! rule:
-//!
-//! > a document is normal for a rule exactly when the rule's own yield for it
-//! > is the document unchanged.
-//!
-//! [`RuleRun::yielded`] is that yield — the guarded output when every oracle
-//! cleared, and the **input verbatim** when the rule declined. So a declined
-//! document is normal because the rule leaves it alone, and a declined
-//! construct is normal because it produces no edit. One field, `declined`, gates
-//! both the bytes ([`RuleRun::accepted`]) and the exemption
-//! ([`RuleRun::departures`]); there is no second list to drift. A rule that
-//! grows a new declination inherits the matching exemption without touching this
-//! module.
-//!
-//! The cost is that the fixpoint clause becomes a near-theorem rather than a
-//! discovery — if no rule changes `f`, the composition cannot. That is the
-//! honest state of affairs, and it is worth a regression test rather than a
-//! hand-written specification that can be wrong.
-//!
-//! The cost's *other* half is sharper, and nothing in this module can pay it:
-//! substitute the derived predicate into both clauses and `format = identity`
-//! satisfies them — every document normal, zero departures, green. So the
-//! standard of correctness comes from outside. the hand-written fixture suite holds
-//! ill-formed inputs paired with **hand-written** expected bytes, one per rule
-//! clause, asserted byte for byte; mutating `format` to return its input fails
-//! 37 of its 43 fixtures while leaving both of its idempotence tests green,
-//! which is the whole reason it exists. That file's module docs carry the full
-//! mutation table, including the two rows measured for [`MarkerRule`], one of
-//! which found that a byte fixture cannot see a per-construct declination at
-//! all.
-//!
-//! [`RuleRun::departures`] localizes the same predicate: `is_normal` is byte
-//! equality, `departures` is *where* the equality fails. `RuleRun::new` asserts
-//! the two agree, so the report cannot drift from the predicate either.
-//!
-//! # Where each rule writes, and what pays for it
-//!
-//! [`GapRule`] is cheap to trust because of *where* it writes: gap bytes are
-//! outside every block's content span, so it cannot disturb a span interior by
-//! construction. It is tempting to read that as the crate's safety property. It
-//! is not — it is one **proof strategy** for the actual property, which is that
-//! a rewrite is faithful to the document. It is the strategy available when a
-//! rewrite's effect depends on the document it is applied to, and you therefore
-//! cannot say what it will do without looking.
-//!
-//! [`TableRule`] and [`MarkerRule`] both write **content** bytes — a delimiter
-//! row's dash count, a bullet character — so neither can use that strategy, and
-//! both carry the re-parse oracle instead. [`MarkerRule`] compares four of the
-//! oracle's five signatures: the fifth is the list markers themselves, which is
-//! what it is defined to change, and it is exempt from that one by name at the
-//! call site rather than by a silence built into the signature. See
-//! [`crate::structure`].
-//!
-//! [`EndingRule`] is faithful for the other reason. Its rewrite is a total,
-//! context-free map on line endings — every `\r` is a CommonMark line ending,
-//! and every line ending becomes `"\n"` — so its effect is fixed by its own
-//! statement and no document can make it do something else. A CRLF between two
-//! lines of a paragraph is span interior, and this rule rewrites it: that is the
-//! point of it, and it is what the gap rule's silence about line endings left
-//! producing files with two endings in them.
-//!
-//! It costs the other rules nothing, because it runs **first** (see [`RULES`]).
-//! Gaps and tables are handed text with no carriage return in it, so their span
-//! interiors are strictly simpler than before. The one rule that reaches inside
-//! a span is the one that removes a byte class the others had no story for.
-//!
-//! # Two evaluations, deliberately
-//!
-//! [`format`] is a **pipeline**: each rule runs on the previous rule's yield.
-//! [`check`] is **independent**: every rule runs on the same input.
-//!
-//! That is not an oversight. A pipeline's second stage reports positions in the
-//! *intermediate* text, which are not coordinates in any file the caller has;
-//! running every rule on the input keeps every reported line and column
-//! addressable in the file on disk. It also makes the predicate **order-free**:
-//! `check` cannot inherit the pipeline's order choice, so no claim about the
-//! rules commuting is key for it.
-//!
-//! `check`'s conjunction is the stronger of the two readings — every rule
-//! individually a no-op on `f` implies `format(f) == f`, while the converse
-//! would additionally need that no rule undoes another's change. The strong
-//! direction is the safe one for a check.
-//!
-//! # One rule at a time
-//!
-//! Both evaluations take the rule list as a **parameter** — [`format_with`] and
-//! [`check_with`] — and [`format`] and [`check`] are those two applied to
-//! [`RULES`]. The CLI's `--rule <name>` is that parameter, resolved through
-//! [`rule_named`], which looks the name up in `RULES` itself. So the vocabulary
-//! the flag accepts is the vocabulary the report tags departures with, and a
-//! rule joins both by joining `RULES`; there is no second list of names to fall
-//! out of step, for the same reason there is no second list of declinations.
-//!
-//! One rule collapses the distinction the section above draws: a one-element
-//! pipeline runs its rule on the input, which is what the independent
-//! evaluation does. So `format --rule gaps` emits exactly what [`GapRule`]
-//! yields for the file on disk, and `format --check --rule gaps` says exactly
-//! where that rule's normal form is missed — reported in the coordinates of
-//! the file as it sits, either way.
-//!
-//! # Nothing here writes a file
-//!
-//! [`format`] returns bytes; the CLI prints them to stdout, or — under
-//! `--write`, for one file a person named — hands them to [`crate::write`],
-//! which is the only module that opens a file. Which files a rewrite may reach
-//! is decided there, in a refusal, and not here: this module's job is that the
-//! bytes are right, and that job is the same whatever the caller does with
-//! them. Every byte it yields either cleared the rule's own oracle
-//! through [`crate::Normalization::accepted`] / [`crate::Padding::accepted`] /
-//! [`crate::Unification::accepted`], or
-//! was never touched by the rule that declined it — with the one exception the
-//! section above states: [`EndingRule`] has no oracle to clear, because its
-//! rewrite has no context-dependence for an oracle to witness.
+//! Applies every rewriting rule in one pass, and decides whether a document is
+//! already in normal form.
 
 use crate::endings::to_lf;
 use crate::markers::unify;
@@ -152,31 +9,9 @@ use crate::table::pad;
 
 /// The rules [`format`] applies, in pipeline order.
 ///
-/// **Endings first.** [`crate::endings`] is a lexical canonicalization, so
-/// running it at the head means no later rule ever sees a carriage return.
-/// None of the other three *states* anything about one — the gap rule's normal
-/// form is a table of LF literals, the table rule's is a table of widths, and
-/// the marker rule's is two characters —
-/// so whatever they would do with a `\r` is incidental behavior rather than
-/// specified behavior. Putting the canonicalization first is what keeps it that
-/// way. It is not observable in the output (the endings rule reaches the same
-/// bytes from any position in the pipeline); it is a claim about which rule owns
-/// the question.
-///
-/// Gaps before tables: gap normalization fixes the block skeleton, and table
-/// padding then works line-locally on whatever skeleton it is handed. Those two
-/// were measured to commute over the 1052-file corpus, but nothing here relies
-/// on that — [`check`] evaluates each rule against the input independently, so
-/// the predicate is order-free whatever this order is.
-///
-/// **Markers last.** Its guard is a re-parse comparison, and the parse it has
-/// to be right about is the parse of the bytes [`format`] finally emits;
-/// running it at the tail is what makes its input those bytes. The position
-/// costs the rules before it nothing, because a marker rewrite replaces one
-/// ASCII byte with another and so preserves every length, line number and
-/// column the earlier rules computed — which is a reason the position is
-/// *available*, not an assertion that the four rules commute. Nothing here
-/// claims they do.
+/// Endings first, so no later rule ever sees a carriage return: none of the
+/// other three states anything about one. Markers last, because its guard
+/// re-parses the bytes [`format`] finally emits.
 pub const RULES: &[&dyn Rule] = &[&EndingRule, &GapRule, &TableRule, &MarkerRule];
 
 /// The rule whose [`Rule::name`] is `name`, or `None` when no rule carries it.
@@ -239,7 +74,7 @@ pub struct Exemption {
 /// Construct through [`Rule::run`]. The bytes come out of [`RuleRun::yielded`]
 /// or [`RuleRun::accepted`]; the predicate is [`RuleRun::is_normal`]; the
 /// locations are [`RuleRun::departures`]. All four are functions of the same
-/// two fields, which is the point — see the module docs.
+/// two fields, so they cannot disagree.
 #[derive(Debug, Clone)]
 pub struct RuleRun {
     /// The rule that produced this, per [`Rule::name`].
@@ -279,11 +114,9 @@ impl RuleRun {
             output
         };
         let normal = output == source;
-        // The bridge between the predicate and its localization: `is_normal`
-        // is byte equality with the rule's yield, `departures` is where that
-        // equality fails, and a rule whose two disagree is misreporting one of
-        // them. Held as an assertion rather than as a comment because the
-        // correspondence is the whole reason this type exists.
+        // `is_normal` is byte equality with the rule's yield and `departures`
+        // is where that equality fails, so a rule whose two disagree is
+        // misreporting one of them.
         debug_assert_eq!(
             normal,
             declined.is_some() || changes.is_empty(),
@@ -577,11 +410,9 @@ impl Rule for TableRule {
 
     fn run(&self, source: &str, opts: &mdstruct::Options) -> Result<RuleRun, Vec<PosError>> {
         let p = pad(source, opts)?;
-        // `pad`'s two whole-document guards. Its `input_partition` is
-        // deliberately absent: padding is defined by row sourcepos and
-        // whole-line ranges, so unlike a gap rewrite it does not need the
-        // partition, and gating on it here would decline documents the rule
-        // itself accepts.
+        // `pad`'s two whole-document guards. `input_partition` is absent on
+        // purpose: padding is defined by row sourcepos and whole-line ranges,
+        // so gating on the partition would decline documents `pad` accepts.
         let declined = p
             .structure
             .as_ref()
@@ -779,11 +610,9 @@ mod tests {
 
     #[test]
     fn a_declined_document_yields_its_input_and_reports_no_departure() {
-        // the gap tests pins this one: deleting the head whitespace
-        // promotes the leading `---` into front matter, so the structure guard
-        // refuses the rewrite. The rule then yields its input, which is what
-        // makes the document normal — the exemption is the declination, read
-        // off the same field.
+        // Deleting the head whitespace promotes the leading `---` into front
+        // matter, so the structure guard refuses the rewrite and the rule
+        // yields its input, which is what makes the document normal.
         let src = std::str::from_utf8(b"\n\n---\nk: v\n---\n").unwrap();
         let gaps = GapRule.run(src, &opts()).expect("spans convert");
         assert!(gaps.declined.is_some(), "the guard must refuse this");

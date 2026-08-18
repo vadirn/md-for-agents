@@ -1,7 +1,7 @@
-//! Walk comrak's AST into a [`Document`]: separate frontmatter / headings /
-//! non-heading blocks at the top level, synthesize the heading tree +
-//! `sectionSpan` (comrak gap #3), decompose wikilinks (gap #4), flag `![[…]]`
-//! embeds via a pre-pass, and scan opt-in regions.
+//! Walks comrak's AST into a [`Document`]: separates frontmatter, headings and
+//! non-heading blocks at the top level, synthesizes the heading tree and
+//! `sectionSpan`, decomposes wikilinks, flags `![[…]]` embeds via a pre-pass,
+//! and scans regions.
 
 use comrak::nodes::{AstNode, ListType, NodeValue};
 use comrak::{Arena, parse_document};
@@ -35,8 +35,7 @@ pub(crate) fn comrak_options(opts: &Options) -> comrak::Options<'static> {
     // like `[^1]: https://example.com` parse as link refs (render nothing), while
     // definitions with whitespace in the destination like `[^1]: Some author, 2019`
     // fail to parse as link refs and fall back to paragraphs — tiled, content
-    // preserved. Footnote harvesting stays a consumer-side regex lane, and fill_gaps
-    // back-covers any uncovered bytes. (Tested against comrak 0.53.0.)
+    // preserved. `fill_gaps` back-covers any uncovered bytes.
     o.extension.autolink = true;
     o.extension.front_matter_delimiter = Some("---".to_string());
     if opts.wikilinks {
@@ -210,15 +209,11 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     }
 }
 
-/// Byte spans of every code block — fenced or indented — harvested from
-/// comrak's parse (so we reuse its block detection rather than reimplementing
-/// the ``` / 4-space-indent grammar). Both kinds are collected here, not just
-/// fenced: an anchor sitting inside a 4-space/tab indented block is bytes, not
-/// markup, exactly like a fenced one. HTML blocks are NOT collected here (that
-/// would swallow the anchor comment lines themselves); inline-code spans are
-/// added separately at the call site. Feeds the always-on region mask. (Not to
-/// be confused with the unrelated `code_block_spans` below, which computes a
-/// single code block's `info_span`/`body_span` for AST conversion.)
+/// Byte spans of every code block, fenced or indented, harvested from comrak's
+/// parse rather than by reimplementing the grammar. An anchor inside an
+/// indented block is bytes, not markup, exactly like one inside a fence.
+/// HTML blocks are excluded, since collecting them would swallow the anchor
+/// comment lines themselves; inline-code spans are added at the call site.
 fn code_block_mask_spans<'a>(root: &'a AstNode<'a>, idx: &LineIndex) -> Vec<Span> {
     let mut spans = Vec::new();
     for node in root.descendants() {
@@ -634,13 +629,11 @@ fn collect_inlines<'a>(
     opts: &Options,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
-    // Code-suppression mask: spans whose bytes
-    // are verbatim, not markup — code (inline + block), frontmatter, raw-HTML
-    // blocks (including HTML comments). The `![[…]]` embed pre-pass skips any
-    // embed whose `!` falls inside one. GFM tables are NOT masked (1.1): a
-    // `![[…]]` in a table cell is now a live embed, and an inline-code cell is
-    // still masked by the `Code` span itself, so the pre-pass stays free of
-    // phantom embeds without a whole-table mask.
+    // Code-suppression mask: spans whose bytes are verbatim, not markup —
+    // code (inline and block), frontmatter, and raw-HTML blocks. The `![[…]]`
+    // pre-pass skips an embed whose `!` falls inside one. GFM tables are not
+    // masked: an inline-code cell is already masked by its own `Code` span, so
+    // the pre-pass stays free of phantom embeds without a whole-table mask.
     let mut mask: Vec<Span> = Vec::new();
 
     for node in root.descendants() {
@@ -657,19 +650,13 @@ fn collect_inlines<'a>(
         {
             mask.push(idx.span_of(sp));
         }
-        // GFM table cells: comrak's inline sourcepos there is unreliable
-        // (escaped-pipe cells shift offsets — R2). Non-wikilink inlines
-        // (links, code spans, images, footnote refs) stay suppressed inside
-        // cells (consumers re-slice raw cell bytes). Wikilinks and
-        // embeds ARE emitted (1.1): the consumer reads their decoded
-        // `target`/`alias`, not the imprecise span, so table-cell backlinks are
-        // not lost. Emphasis IS emitted too (1.3) on a weaker warrant: the
-        // consumer asks whether emphasis is present at all, and a cell span that
-        // shifts still locates the run's line and cell. That is the same
-        // precision/presence tradeoff wikilinks already accept — except that
-        // `Emph`/`Strong` carry no decoded fallback field, so an escaped-pipe
-        // cell leaves the imprecise span as the only handle. The oracle exempts
-        // all three inside cells (verify.rs).
+        // comrak's inline sourcepos inside a GFM table cell is unreliable:
+        // an escaped pipe shifts the offsets. Links, code spans, images and
+        // footnote refs stay suppressed there, since a consumer can re-slice
+        // the raw cell bytes. Wikilinks, embeds and emphasis are emitted
+        // anyway: a consumer reads their decoded `target`/`alias`, or only
+        // asks whether emphasis is present, and an imprecise span still
+        // answers that.
         if in_table(node)
             && !matches!(
                 &d.value,

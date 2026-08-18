@@ -1,6 +1,7 @@
-//! Minimal wikilink helpers the slugger needs: strip `[[…]]` markup from a label
-//! down to its display text. Link *counting* comes from mdstruct inlines (see
-//! [`crate::facet::link_count`]); this module only rewrites a heading string.
+//! Strips `[[…]]` markup from a heading label down to its display text.
+//!
+//! Link counting comes from mdstruct inlines instead, via
+//! [`crate::facet::link_count`].
 
 use std::sync::LazyLock;
 

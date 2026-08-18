@@ -1,8 +1,6 @@
-//! Thin CLI over the mdstruct structural core. Three verbs, one parse each:
-//!   (default)  parse → NDJSON on stdout (one JSON document per line)
-//!   check      freeze gate → pass/fail summary on stderr, exit 4 on failure
-//!   stats      type-coverage report on stdout
-//! Each verb owns a stream contract; none crosses stdout with stderr.
+//! CLI over the mdstruct structural core.
+//!
+//! Each verb owns a stream contract, and none crosses stdout with stderr.
 
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};

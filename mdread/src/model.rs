@@ -1,9 +1,8 @@
 //! Document model: the heading tree, its parser, and the per-line range
 //! arithmetic the renderers and resolver share.
 //!
-//! The pre-heading / heading-less text region is modelled as a synthetic node
-//! (address `"0"`, slug `"text"`, heading `"(text)"`, `level` 0, empty children)
-//! so resolver, overview, section, and JSON paths treat it like any other node.
+//! The pre-heading text region is a synthetic node (address `"0"`, slug
+//! `"text"`, level 0), so every consumer treats it like any other node.
 
 use crate::facet::HeadingRule;
 use crate::tokens;

@@ -1,9 +1,8 @@
 //! Locator facet over [`mdstruct`]: the body's headings in document order, its
-//! outgoing links, and line splitting — everything the reader's tree builder and
-//! overview consume, from one whole-document parse.
+//! outgoing links, and line splitting, from one whole-document parse.
 //!
 //! comrak already excludes a `#` inside a code fence or the frontmatter block,
-//! so no fence-toggling scan is needed for heading detection.
+//! so heading detection needs no fence-toggling scan.
 
 use mdstruct::{Heading, Inline, Options, parse};
 

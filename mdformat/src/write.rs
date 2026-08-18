@@ -1,38 +1,7 @@
 //! The crate's one file-writing path, and the gate around it.
 //!
-//! Every other module here returns bytes and lets the caller decide what to do
-//! with them. This one opens a file for writing, so it carries the two things
-//! that decision needs: a **gate** that admits exactly one human-chosen file,
-//! and a **replacement** that cannot leave a truncated one behind.
-//!
-//! # Why the gate is code and not a paragraph
-//!
-//! "May write" is not one permission. Rewriting one file a person picked, is
-//! looking at, and can undo by hand is a different act from rewriting a tree —
-//! the first is inspected, the second is trusted. The second needs conditions
-//! this program cannot check: that the target is versioned or backed up, that a
-//! restore has actually been performed once, that a dry run over a copy was
-//! read. A README asking for those conditions is satisfied by remembering; a
-//! refusal in [`target`] is satisfied by nothing else. So the boundary lives
-//! here, where a second path can only appear as a deliberate edit to this file.
-//!
-//! [`target`] therefore refuses a second path rather than looping over it,
-//! refuses a directory rather than walking it, and refuses `-` rather than
-//! inventing a file for stdin to land in. A shell glob reaches it as a list of
-//! paths and is refused by the first of those rules.
-//!
-//! # Why the replacement is a rename
-//!
-//! Writing over the target in place has a window — between the truncate and the
-//! last byte — in which an interrupted run leaves a file that is neither the old
-//! document nor the new one. For a corpus whose only copy is the file itself
-//! that window is the whole risk. [`replace`] closes it: the new bytes go to a
-//! **sibling** temp file (a sibling, so the rename stays inside one filesystem
-//! and is therefore atomic), that file is flushed and given the target's
-//! permission bits, and only then does one `rename` swap it in. The target's
-//! old inode is never opened for writing, so every failure before the rename
-//! leaves the original byte-identical, and the rename itself either happened or
-//! did not.
+//! Writes through a temporary file and renames, so a failed write cannot leave
+//! a truncated file behind.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -226,8 +195,6 @@ mod tests {
         assert_eq!(got, p);
     }
 
-    /// The gate, stated as a refusal rather than as a loop: two paths is what a
-    /// shell glob over a directory looks like from here.
     #[test]
     fn two_paths_are_refused_and_the_message_names_the_gate() {
         let dir = scratch("target-two");
@@ -244,8 +211,6 @@ mod tests {
         assert!(said.contains(GATE), "{said}");
     }
 
-    /// Zero paths is refused for the same reason two is, and specifically is
-    /// not defaulted to stdin the way every reporting verb defaults it.
     #[test]
     fn no_path_is_refused_rather_than_defaulted_to_stdin() {
         let err = target(&[]).expect_err("no path is refused");
@@ -259,8 +224,6 @@ mod tests {
         assert!(err.to_string().contains(GATE));
     }
 
-    /// A directory is the shape a batch arrives in, so it is refused here and
-    /// not walked.
     #[test]
     fn a_directory_is_refused_and_never_walked() {
         let dir = scratch("target-dir");
@@ -300,10 +263,6 @@ mod tests {
         assert_eq!(fs::read(&p).expect("read back"), b"new\n");
     }
 
-    /// The atomicity claim, made observable: an open handle on the target still
-    /// reads the old bytes after the replacement, and the target's inode has
-    /// changed. Both hold only if the original file object was never opened for
-    /// writing — which is what makes an interrupted run harmless.
     #[test]
     fn the_original_file_object_is_never_written_to() {
         use std::os::unix::fs::MetadataExt;
@@ -325,8 +284,6 @@ mod tests {
         assert_ne!(before, after, "the name must point at a new inode");
     }
 
-    /// Nothing is left beside the target: the temp file is renamed, not copied,
-    /// so a successful run adds no entry to the directory.
     #[test]
     fn a_successful_replacement_leaves_no_temp_file_behind() {
         let dir = scratch("replace-clean");
@@ -339,8 +296,6 @@ mod tests {
         assert_eq!(entries, vec![OsString::from("note.md")], "{entries:?}");
     }
 
-    /// The temp file is a sibling, which is what keeps the rename inside one
-    /// filesystem and therefore atomic.
     #[test]
     fn the_temp_file_is_a_hidden_sibling_of_the_target() {
         let dir = scratch("replace-sibling");
@@ -357,9 +312,6 @@ mod tests {
         assert_ne!(tmp, temp_path(&p), "two temp names must not collide");
     }
 
-    /// The mode the file carried is the mode it carries afterwards — including
-    /// a read-only file, which the rename can replace precisely because it never
-    /// opens it.
     #[test]
     fn the_permission_bits_survive_the_replacement() {
         let dir = scratch("replace-perms");
@@ -373,8 +325,6 @@ mod tests {
         }
     }
 
-    /// A stale temp file from an earlier interrupted run is inert: the next
-    /// replacement picks a fresh name and leaves it alone.
     #[test]
     fn a_stale_temp_file_blocks_nothing() {
         let dir = scratch("replace-stale");

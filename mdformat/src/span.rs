@@ -1,28 +1,7 @@
-//! Line/column → byte offset, the one place `mdformat` does that arithmetic.
+//! Line/column to byte offset.
 //!
-//! The formula is `mdstruct`'s (`mdstruct/src/core/span.rs:77-82`), because it
-//! has to be: comrak's `Sourcepos` is 1-based line/column where the column
-//! counts UTF-8 **bytes** within the line (`parse.sourcepos_chars` is not
-//! enabled) and `end` points at the **last byte** of the node's last
-//! character, so
-//!
-//! ```text
-//! start = line_start(start.line) + (start.column - 1)
-//! end   = line_start(end.line)   + end.column
-//! ```
-//!
-//! `LineIndex::new` also keeps `mdstruct`'s line-ending rule: `\n`, `\r\n`,
-//! and a lone `\r` each end a line, per CommonMark. That comrak agrees is not
-//! assumed — `lone_cr_is_a_line_ending_for_comrak_too`
-//! pins it against a real parse, where a `\n`-only index would place the
-//! second line seven bytes too late.
-//!
-//! One behavior is deliberately **not** `mdstruct`'s: that module clamps both
-//! ends with `.min(len)` and `end.max(start)`. A clamp is defensible in a
-//! linter, where an out-of-range position merely shortens a span and the
-//! tiling gate may notice. In a printer it silently emits the wrong bytes, so
-//! here every out-of-range position is a [`PosError`] naming the node kind and
-//! the position; the caller adds the file name.
+//! comrak's `Sourcepos` is 1-based, its column counts UTF-8 bytes rather than
+//! characters, and its `end` points at the last byte rather than one past it.
 
 use std::fmt;
 

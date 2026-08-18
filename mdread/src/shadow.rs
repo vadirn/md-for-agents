@@ -1,14 +1,8 @@
-//! Reserved addresses: what they name, and which headings collide with them.
+//! Reserved addresses, and which headings they shadow.
 //!
 //! Reserved names (`0`/`text`, `fm`/`frontmatter`, `links`) are matched before
-//! the heading tree, so a `## Links` section is unreachable by its slug. That
-//! precedence stands — one address, one meaning — and this module makes the
-//! collision audible instead of silent. [`reserved_reading`] is the single
-//! definition of what a reserved address is: the dispatch matches on it to pick
-//! a reading, and the announcements ask it of a heading's slug. One tree walk
-//! answers the question for every consumer: the overview footer, the note
-//! printed when a reserved reading is served over a live shadow, and the two
-//! errors a reserved address raises when it resolves to nothing.
+//! the heading tree, so a `## Links` section is unreachable by its slug. This
+//! module makes that collision audible rather than silent.
 
 use crate::model::{Document, Node, flatten};
 

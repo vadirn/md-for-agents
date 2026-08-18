@@ -1,94 +1,8 @@
-//! The table anchor comrak carries, and the one correction this crate makes to
-//! it.
+//! Corrects the cell offsets comrak reports for table rows.
 //!
-//! comrak fixes a table's opening offset **once**, when the header row is
-//! recognised, and then adds it to every later row's cell offsets as if the
-//! bytes in front of the header repeated on every line the table spans. In
-//! comrak 0.53.0's `src/parser/table.rs` the two halves are visible side by
-//! side: `try_opening_header` takes `start` from the paragraph the header was,
-//! and `try_opening_row` — which runs for each later physical line — reads that
-//! same `container.data().sourcepos.start.column` and writes
-//! `start.column + cell.start_offset` and `start.column + cell.end_offset`,
-//! while the offsets themselves come from `row(&line[parser.first_nonspace..])`
-//! and so are measured from *this* line's own first non-whitespace byte. A row
-//! whose line opens at a different offset than the header's therefore lands
-//! wherever the header opened, plus its own offsets.
-//!
-//! Two fields escape, and they are the same two [`repair_table_columns`]
-//! excludes: a [`NodeValue::TableRow`]'s own `end`, set from
-//! `parser.curline_end_col`, and a [`NodeValue::Table`]'s `end`, set in
-//! `adjust_table_counters` from the line being parsed. Both are measured on the
-//! line they land on, so both are already right, and moving them would move a
-//! correct column.
-//!
-//! # What the carry looks like, and why it is not a fixed width
-//!
-//! The signed error `carried − true` is exactly `header opening offset − this
-//! row's opening offset`. Three shapes make that concrete, and all three are
-//! pinned below:
-//!
-//! - **A byte order mark.** `\u{feff}|a|\n|-|\n|1|\n` — the mark's three bytes
-//!   sit on line 1 and on no other line, so every body row is reported three
-//!   columns right of where it is and the last cell's span ran past the end of
-//!   the file. The crate repaired that case and only that case until this
-//!   module existed, in [`crate::bom`], keyed on `source.starts_with(BOM)` and
-//!   subtracting a constant 3.
-//! - **An indent a later row omits.** `   |a|b|\n   |-|-|\n   |1|2|\npara\n` —
-//!   the lazy last row carries no indent, so its cells are reported three
-//!   columns right and run past the end. Same error, same size, no mark.
-//! - **An indent a later row *deepens*.** ` |a|b|\n |-|-|\n   |1|2|\n` — the
-//!   carry is **−2**. A subtraction cannot express it, which is why the constant
-//!   this module once subtracted could never have generalized.
-//!
-//! The middle shape is also why silencing the reported error would have been the
-//! wrong repair. The error is the visible tip: with a 1-space indent the same
-//! document resolves its real cell to `"ara\n"` — different bytes, line ending
-//! included — and reports nothing, and a lazy row among deeper ones resolves a
-//! cell to `"|3|"` while `mdformat partition` passes at exit 0.
-//! [`crate::print::block_spans`] flags a node only when
-//! [`crate::span::LineIndex::byte_span`] fails outright, and it checks a table's
-//! rolled-up min/max span, which still covers the right overall range while the
-//! per-cell attribution underneath is scrambled.
-//!
-//! # How the true opening is recovered
-//!
-//! The true anchor for a line is `parser.first_nonspace + 1`: the 1-based byte
-//! column of the first byte after that line's container prefix and indentation.
-//! `row_offset` below recovers it by skipping the leading run of `' '`, `'\t'` and
-//! `'>'`, and that run is exactly the prefix, because
-//!
-//! - a container's *continuation* prefix is only ever indentation (a list item,
-//!   a footnote definition, an indented table) or a block quote's `>` with at
-//!   most one following space — a list marker appears on a container's opening
-//!   line, never on the continuation lines rows sit on; and
-//! - a row's own first byte is never `' '`, `'\t'` or `'>'`: the first two are
-//!   skipped by `first_nonspace` before the row is read at all, and a `>` after
-//!   the prefix opens a nested block quote, which ends the table rather than
-//!   contributing a row to it.
-//!
-//! A tab needs no special case even though it is skipped: at top level a leading
-//! tab reaches column 4 and makes the line an indented code block, so it never
-//! becomes a row; inside a container it is prefix, and the skip counts it as
-//! prefix.
-//!
-//! # The boundary
-//!
-//! Only a column on a line **after the table's opening line** is corrected. The
-//! opening line's columns are the anchor's own line, where the header's offset
-//! really does sit — including a byte order mark's three bytes, which comrak
-//! counts there correctly.
-//! `a_byte_order_mark_shifts_only_line_one_columns_inside_a_table` holds that
-//! boundary against a real parse in both directions.
-//!
-//! # Why this lives at the parse seam
-//!
-//! [`crate::parse_with`] is the crate's single parse, and the miscount reaches
-//! more than one reader: [`crate::print::block_spans`] converts cell positions
-//! to byte ranges, and [`crate::table::pad`] slices the source at them to read a
-//! cell's text. Correcting it in the printer alone would stop the error and
-//! leave the padder measuring the wrong bytes. Correcting comrak's output once,
-//! where it enters the crate, is what makes every downstream reader see the same
-//! positions — and it is why a caller needs no knowledge of the carry at all.
+//! comrak fixes a table's opening offset once, when it recognises the header
+//! row, then adds that offset to every later row's cells. Rows after the first
+//! are skewed by the header line's own indent, which this module subtracts.
 
 use comrak::nodes::{AstNode, NodeValue};
 
@@ -98,10 +12,7 @@ use crate::table::line_content_range;
 /// Byte offset within one line's content of the first byte a table row can
 /// open on: the length of the leading run of `' '`, `'\t'` and `'>'`.
 ///
-/// This reproduces comrak's `parser.first_nonspace` for a line a table row sits
-/// on; the module docs argue why the two alphabets coincide there. Adding 1
-/// gives the 1-based column comrak would have anchored that row at had it been
-/// the header.
+/// Reproduces comrak's `parser.first_nonspace` for a line a table row sits on.
 fn row_offset(content: &str) -> usize {
     content
         .bytes()
@@ -142,9 +53,9 @@ fn reanchor(idx: &LineIndex, anchor: usize, open_line: usize, line: usize, colum
 ///
 /// `root` must be the result of parsing `source`. A table whose every line opens
 /// at the same offset — which is nearly all of them — comes back unchanged,
-/// because the recovered anchor is then the carried one. See the module docs for
-/// the two fields inside a table that are deliberately left alone, and for the
-/// boundary at the table's opening line.
+/// because the recovered anchor is then the carried one. A column on the
+/// table's own opening line is left alone: that is where the carried offset
+/// really does sit.
 pub fn repair_table_columns<'a>(root: &'a AstNode<'a>, source: &str) {
     let idx = LineIndex::new(source);
     for table in root.descendants() {
@@ -243,11 +154,6 @@ mod tests {
         assert_eq!(repaired(&idx, 99, 4, 5), None);
     }
 
-    /// The repair's whole claim, stated as bytes: every cell resolves to its
-    /// own source text, whatever each row's line opens at. Every specimen but
-    /// the last two reddens if the repair is dropped — five of them by
-    /// resolving to different bytes with no error at all, which is the failure
-    /// mode that made repairing the right answer instead of silencing.
     #[test]
     fn every_cell_resolves_to_its_own_bytes() {
         // (name, source, the text of each cell in document order)
@@ -316,16 +222,6 @@ mod tests {
         }
     }
 
-    /// The boundary at the opening line, and the two line-measured ends, held
-    /// as whole positions rather than as resolved bytes.
-    ///
-    /// Each half reddens under a different over-repair. Dropping the opening
-    /// line from the boundary moves the marked specimen's header cells off the
-    /// three bytes the mark really occupies. Dropping the `Table`/`TableRow`
-    /// exemption moves the indented specimen's ends, which comrak measured from
-    /// the line they land on — the row's `end` is its line's content length, 8,
-    /// under a start that has to move from 2 to 4. Under-repair reddens both,
-    /// leaving each body row's start at its header's column.
     #[test]
     fn the_opening_line_and_the_line_measured_ends_are_left_alone() {
         /// (name, source, every node's kind and position, root excluded).

@@ -1,29 +1,4 @@
-//! Hermetic fixtures for the block-level passthrough printer and its
-//! partition oracle.
-//!
-//! Every fixture is an embedded byte literal, never an on-disk `.md` file:
-//! the roundtrip tests set that precedent because a fixture on disk
-//! is one formatting pass away from being silently rewritten — and a printer
-//! whose fixtures get reformatted tests nothing. Byte literals also let CRLF,
-//! a lone `\r`, and a BOM appear exactly as bytes.
-//!
-//! The fixtures aim at two things: constructs this corpus actually holds and
-//! that a naive printer would damage, and — since a corpus proves nothing
-//! about what it lacks — the Obsidian constructs a census of all 1052 corpus
-//! files found ZERO live occurrences of. Those are marked `zero in corpus`
-//! below; the corpus run cannot exercise them, so only a fixture can.
-//!
-//! Everything here is a specimen the oracle must **accept**. The specimens it
-//! must **reject** live in the negative-control suite, which pins the two shapes
-//! the printer's workarounds leave open.
-//!
-//! The three tests that matter most are the ones a naive
-//! implementation would *pass*:
-//! [`reassembly_alone_misses_what_the_partition_catches`] (the vacuous-oracle
-//! trap), [`shortening_every_span_by_one_byte_fails_the_partition`] (the
-//! injection the oracle must catch), and
-//! [`a_dropped_link_reference_definition_fails_the_oracle`] (content comrak
-//! deletes must be refused, not tolerated).
+//! Hermetic fixtures for the passthrough printer and its partition oracle.
 
 use comrak::Arena;
 use comrak::nodes::Sourcepos;
@@ -56,7 +31,7 @@ const FIXTURES: &[(&str, &str)] = &[
         "callout-in-list",
         "- item\n  > [!Tip]\n  > tip body\n- next\n\nafter\n",
     ),
-    // Foldable callouts — `-` collapsed, `+` expanded. Zero in corpus. comrak
+    // Foldable callouts — `-` collapsed, `+` expanded. comrak
     // has no callout extension, so the fold marker is just text inside the
     // block quote's first paragraph; the fixture pins that it stays there.
     (
@@ -64,7 +39,7 @@ const FIXTURES: &[(&str, &str)] = &[
         "> [!faq]- Collapsed by default\n> This content is hidden until expanded.\n\n\
          > [!faq]+ Expanded by default\n> This content is visible but can be collapsed.\n\nafter\n",
     ),
-    // A callout inside a callout. Zero in corpus. `callout-nested` above nests
+    // A callout inside a callout. `callout-nested` above nests
     // a bare quote; this nests a second *callout*, which is the Obsidian
     // construct, and comrak reads it as a block quote holding a block quote.
     (
@@ -79,10 +54,9 @@ const FIXTURES: &[(&str, &str)] = &[
         "> [!question] Outer\n>\n> > [!note] Inner\n> >\n> >     code in inner\n\nafter\n",
     ),
     // --- footnote definitions with no reference ----------------------------
-    // `extension.footnote` is deliberately OFF (comrak would drop unreferenced
-    // definitions), so these parse as paragraphs and the printer emits their
-    // bytes. Prose after the colon is what keeps them out of link-reference
-    // territory; see `a_dropped_link_reference_definition_fails_the_oracle`.
+    // `extension.footnote` is OFF, since comrak would drop unreferenced
+    // definitions, so these parse as paragraphs and the printer emits their
+    // bytes. Prose after the colon keeps them out of link-reference territory.
     (
         "footnote-definitions",
         "Body text.\n\n[^1]: Author, Title, 2020, p. 14.\n[^2]: Second entry, no reference anywhere.\n",
@@ -93,7 +67,7 @@ const FIXTURES: &[(&str, &str)] = &[
     ),
     // A footnote definition whose destination is a single token IS a valid link
     // reference definition, so comrak deletes it and a synthetic block has to
-    // claim the line. Four operative corpus files rest on this.
+    // claim the line.
     (
         "footnote-definition-bare-url",
         "Body text[^1].\n\n[^1]: https://example.com/a/deep/path\n",
@@ -125,28 +99,27 @@ const FIXTURES: &[(&str, &str)] = &[
         "| a | b |\n|---|---|\n| [[Note\\|alias]] | x \\| y |\n",
     ),
     // A wikilink with no note name, targeting a heading in the same file.
-    // Zero in corpus.
     (
         "wikilink-same-note",
         "A link to [[#Heading in same note]] and [[Note#Heading|Custom]].\n\n\
          # Heading in same note\n\nbody\n",
     ),
     // Obsidian's search wikilinks: `[[##…]]` searches headings, `[[^^…]]`
-    // searches blocks. Zero in corpus. Neither is a link target, so what
+    // searches blocks. Neither is a link target, so what
     // matters is that comrak's wikilink extension does not eat the bytes.
     (
         "wikilink-search",
         "Search [[##heading]] for headings and [[^^block]] for blocks.\n\nafter\n",
     ),
-    // PDF embeds, including the `#height=` fragment. Zero in corpus.
+    // PDF embeds, including the `#height=` fragment.
     (
         "embed-pdf",
         "![[document.pdf]]\n\n![[document.pdf#page=3]]\n\n![[document.pdf#height=400]]\n\nafter\n",
     ),
-    // Audio embeds. Zero in corpus.
+    // Audio embeds.
     ("embed-audio", "![[audio.mp3]]\n\n![[audio.ogg]]\n\nafter\n"),
     // A trailing block ID, which is how Obsidian names a block as a link
-    // target. One live occurrence in the corpus. Three placements: after a
+    // target. Three placements: after a
     // paragraph, on its own line after a quote, and on its own line after a
     // list.
     (
@@ -162,14 +135,14 @@ const FIXTURES: &[(&str, &str)] = &[
         "block-id-absorbed-by-list",
         "- Item 1\n- Item 2\n^list-id\n\nafter\n",
     ),
-    // An inline footnote. Zero in corpus, and `extension.footnote` is OFF, so
+    // An inline footnote. `extension.footnote` is OFF, so
     // `^[…]` survives as paragraph text.
     (
         "inline-footnote",
         "Inline footnotes are also supported.^[This is an inline footnote.]\n\nafter\n",
     ),
     // Obsidian comments: inline `%%…%%`, and a block delimited by bare `%%`
-    // lines. Zero in corpus. comrak has no comment extension, so both are
+    // lines. comrak has no comment extension, so both are
     // ordinary paragraph text and the bytes must survive.
     (
         "block-comment",
@@ -194,10 +167,8 @@ const FIXTURES: &[(&str, &str)] = &[
     ),
     // An indented table whose last row is a lazy continuation carrying no
     // indent. comrak anchors every row at the header's opening offset, so the
-    // lazy row's cells came back three columns right of where they are and ran
-    // past the end of the file; `mdformat::anchor` re-anchors each row at its
-    // own line. Kept beside `bom-table`, which is the same defect with the
-    // header's extra bytes being a byte order mark instead of an indent.
+    // lazy row's cells come back three columns right; `mdformat::anchor`
+    // re-anchors each row at its own line.
     (
         "table-indented-lazy-row",
         "   |a|b|\n   |-|-|\n   |1|2|\npara\n",
@@ -215,12 +186,12 @@ const FIXTURES: &[(&str, &str)] = &[
         "- a\n\n  continued\n\n- b\n\nafter\n",
     ),
     ("ordered-list", "1. a\n2. b\n10. c\n\nafter\n"),
-    // `)` as the ordered-list delimiter. Zero in corpus.
+    // `)` as the ordered-list delimiter.
     (
         "ordered-list-paren",
         "1) Alternative syntax\n2) With parentheses\n\nafter\n",
     ),
-    // `*` and `+` bullets. Zero in corpus, which is all `-`. Two adjacent
+    // `*` and `+` bullets. Two adjacent
     // lists, since a change of bullet character starts a new list.
     (
         "unordered-list-star-plus",
@@ -244,8 +215,7 @@ const FIXTURES: &[(&str, &str)] = &[
         "  ```rust\n  let x = 1;\n  ```\n\nafter\n",
     ),
     ("fenced-code-unclosed", "```\nnever closed\n"),
-    // A ```query fence — Obsidian's embedded search. Zero of the corpus's 530
-    // fence-opens use this info string.
+    // A ```query fence — Obsidian's embedded search.
     (
         "query-fence",
         "```query\ntag:#project status:done\n```\n\nafter\n",
@@ -264,7 +234,7 @@ const FIXTURES: &[(&str, &str)] = &[
         "- item one\n- last item:\n\n        code line one\n        code line two\n",
     ),
     // An indented code block inside a list item, which truncates the sourcepos
-    // of every container above it — reduced from a corpus file.
+    // of every container above it.
     (
         "indented-code-in-list",
         "1.  First [P1]\n\n        - Status: In Development\n\n2.  Second [P2]\n\n        - Status: Assisting\n\n---\n",
@@ -319,8 +289,6 @@ fn spans(source: &str) -> Vec<Block> {
     })
 }
 
-/// Shorten every span's end by one byte — the injection an oracle has to
-/// catch, and the one a "span slices plus gap bytes" comparison does not.
 fn shorten_every_span(blocks: &[Block]) -> Vec<Block> {
     blocks
         .iter()
@@ -349,9 +317,6 @@ fn every_fixture_partitions_its_content_bytes() {
     }
 }
 
-/// Every span must slice the bytes it claims without panicking and without
-/// crossing a character boundary — the fixtures include Cyrillic, emoji, and a
-/// non-breaking space precisely to exercise the byte-column arithmetic.
 #[test]
 fn every_span_slices_cleanly() {
     for (name, src) in FIXTURES {
@@ -368,8 +333,6 @@ fn every_span_slices_cleanly() {
     }
 }
 
-/// The injection. Shortening every span's end by one byte must make the
-/// partition check fail, on every fixture that has a block ending in content.
 #[test]
 fn shortening_every_span_by_one_byte_fails_the_partition() {
     for (name, src) in FIXTURES {
@@ -408,10 +371,6 @@ fn shortening_every_span_by_one_byte_fails_the_partition() {
     }
 }
 
-/// The trap this milestone exists to avoid, as a live assertion: the printer's
-/// own output is boundary-insensitive, so equality with the input is satisfied
-/// by a span set the partition oracle rejects. Anyone tempted to drop the
-/// oracle and keep `print(parse(f)) == f` has to delete this test first.
 #[test]
 fn reassembly_alone_misses_what_the_partition_catches() {
     let mut checked = 0usize;
@@ -435,11 +394,6 @@ fn reassembly_alone_misses_what_the_partition_catches() {
     );
 }
 
-/// comrak agrees with `LineIndex` that a lone `\r` ends a line. Verified
-/// against a real parse rather than assumed from CommonMark: with `\n`-only
-/// line counting, line 2 would start at byte 7 instead of byte 2 and the
-/// heading span would slice the wrong bytes — or, under this crate's strict
-/// conversion, fail as an out-of-range line.
 #[test]
 fn lone_cr_is_a_line_ending_for_comrak_too() {
     let src = "a\r## H\rbody\r";
@@ -453,8 +407,6 @@ fn lone_cr_is_a_line_ending_for_comrak_too() {
     assert!(check_partition(src, &blocks).is_partition());
 }
 
-/// A CRLF file's spans must stop before the `\r`, leaving both bytes to the
-/// gap the printer copies verbatim.
 #[test]
 fn crlf_line_endings_stay_outside_the_spans() {
     let src = "# H\r\n\r\npara\r\n";
@@ -464,11 +416,6 @@ fn crlf_line_endings_stay_outside_the_spans() {
     assert!(check_partition(src, &blocks).is_partition());
 }
 
-/// A link reference definition is consumed by comrak with no node emitted, so
-/// its bytes belong to no comrak span. They must still be claimed, by a
-/// synthetic `linkReferenceDefinition` block, or the printer would delete
-/// content — and the oracle would report it, since it has no tolerance for
-/// unclaimed bytes.
 #[test]
 fn a_dropped_link_reference_definition_is_claimed_by_a_synthetic_block() {
     let src = "[label]: https://example.com\n\nSee [label].\n";
@@ -484,12 +431,6 @@ fn a_dropped_link_reference_definition_is_claimed_by_a_synthetic_block() {
     assert_eq!(reassemble(src, &blocks), src);
 }
 
-/// The same hazard reached through a footnote definition, which is how the
-/// corpus keeps bibliographies. With a single-token destination,
-/// `[^1]: https://x.io` IS a valid link reference definition and comrak
-/// deletes it; `[^1]: Author, Title, 2020` is not one and survives as a
-/// paragraph. Four operative corpus files hold the deleted form, so this pins
-/// both sides of the boundary.
 #[test]
 fn a_footnote_definition_is_claimed_whether_or_not_comrak_keeps_it() {
     let prose = "[^1]: Author, Title, 2020.\n";
@@ -505,10 +446,6 @@ fn a_footnote_definition_is_claimed_whether_or_not_comrak_keeps_it() {
     assert_eq!(reassemble(bare, &bare_blocks), bare);
 }
 
-/// The claim is line-exact: a line that shares itself with any block span is
-/// never claimed, however linkref-shaped it looks. That is what keeps the fill
-/// from blunting the injection test — a leaked byte always shares its line with
-/// the span that leaked it.
 #[test]
 fn the_fill_never_claims_a_line_a_block_already_touches() {
     // `[x]: y` here is inside a fenced code block, so the fence owns the line.
@@ -519,9 +456,6 @@ fn the_fill_never_claims_a_line_a_block_already_touches() {
     assert!(check_partition(src, &blocks).is_partition());
 }
 
-/// An out-of-range sourcepos is an error naming the node kind and the
-/// position, not the silent clamp `mdstruct::core::span` applies. A printer
-/// that clamped would emit a shortened block with no signal at all.
 #[test]
 fn an_out_of_range_sourcepos_errors_instead_of_clamping() {
     let idx = LineIndex::new("# H\n");
@@ -542,14 +476,6 @@ fn an_out_of_range_sourcepos_errors_instead_of_clamping() {
     );
 }
 
-/// Consecutive blank lines are preserved verbatim, byte for byte, by the
-/// passthrough printer. Normalizing them is [`mdformat::normalize`]'s job and
-/// is opt-in, so `reassemble` must not touch them.
-///
-/// An earlier version of this comment claimed the corpus holds "427 double-blank
-/// and 71 triple-blank gaps". That number could not be reproduced: the corpus
-/// contains **3** occurrences of `\n\n\n` in 2 files, every one inside a fenced
-/// code block or a container, and none in a top-level gap.
 #[test]
 fn consecutive_blank_lines_survive_verbatim() {
     for src in [
@@ -565,9 +491,6 @@ fn consecutive_blank_lines_survive_verbatim() {
     }
 }
 
-/// A fence whose info string is `markdown` must come back exactly as written,
-/// including the badly spaced list inside it. This is the fixture that would
-/// fail immediately if the printer ever routed through comrak's own renderer.
 #[test]
 fn a_markdown_fence_is_not_reformatted() {
     let src = "```markdown\n*   spaced   list\n#   heading\n```\n";
@@ -581,9 +504,6 @@ fn a_markdown_fence_is_not_reformatted() {
     assert_eq!(reassemble(src, &blocks), src);
 }
 
-/// Block children are not claimed alongside their parent: a list's span covers
-/// its items, and pushing the items too would be an overlap the oracle
-/// reports. This pins the block-level scope decision.
 #[test]
 fn only_top_level_blocks_are_claimed() {
     let src = "- a\n  - b\n- c\n\n> quoted\n";
@@ -598,13 +518,6 @@ fn only_top_level_blocks_are_claimed() {
     assert_eq!(&src[blocks[1].start..blocks[1].end], "> quoted");
 }
 
-/// comrak truncates a container's end when an indented code block sits inside a
-/// list item, which is why every top-level span is the union of its own range
-/// and its block descendants'. Reduced from a corpus file, where the
-/// raw sourcepos left 179 bytes of list content in no span at all: the item's
-/// own code block reports an EMPTY range, and only the last item's spans are
-/// right. Both halves are asserted, so a comrak release that fixes the
-/// truncation shows up here as a failure to explain rather than as silence.
 #[test]
 fn a_truncated_container_span_is_repaired_by_its_descendants() {
     let src = "1.  First [P1]\n\n        - Status: In Development\n        - Purpose: x\n\n\

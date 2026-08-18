@@ -1,34 +1,9 @@
-//! CLI-level coverage for the surface itself: which verbs exist, what `--rule`
-//! selects, and what gets reported without being asked.
-//!
-//! The write tests drive the same binary for the one verb-flag that opens a
-//! file; this file drives everything that only reads. Both go through the
-//! compiled binary rather than the library, because a surface is not a function
-//! — it is what an invocation is accepted or refused for, and what a person
-//! reading stderr is told.
-//!
-//! Four claims are asserted here and nowhere else:
-//!
-//! 1. **Two verbs.** `normalize` and `pad` are refused as unknown subcommands.
-//!    Their capability did not go with them: `--rule` reaches it, which claims
-//!    2 and 3 hold.
-//! 2. **`--rule` selects one rule for output**, by the name the reports tag a
-//!    departure with, and an unknown name is a refused invocation naming the
-//!    ones that exist.
-//! 3. **`--rule` selects one rule for `--check`**, reporting that rule's
-//!    departures and no other rule's.
-//! 4. **Exemptions print unconditionally**, in both modes, with no flag to ask
-//!    with — the property `--verbose` used to gate.
-//!
-//! Every fixture lives in a fresh directory under `TMPDIR`, and specimens are
-//! byte literals so no escape here can be mistaken for a markdown escape in the
-//! document.
+//! CLI coverage for the read-only verbs and flags.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Run `mdformat <args...>`. Returns (exit code, stdout, stderr).
 fn run(args: &[&str]) -> (i32, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_mdformat"))
         .args(args)
@@ -68,8 +43,6 @@ const GAPS_ONLY: &str = "# H\n\n| key | value |\n| --- | --- |\n| a | longer |\n
 const TABLES_ONLY: &str = "# H\n\n\n| key | value |\n| --- | ----- |\n| a   | longer |\n";
 const FORMATTED: &str = "# H\n\n| key | value |\n| --- | ----- |\n| a   | longer |\n";
 
-/// (1) The two removed verbs are gone from the surface, refused by name rather
-/// than silently doing something else.
 #[test]
 fn normalize_and_pad_are_no_longer_verbs() {
     for verb in ["normalize", "pad"] {
@@ -86,7 +59,6 @@ fn normalize_and_pad_are_no_longer_verbs() {
     }
 }
 
-/// The verbs that remain are exactly two, as `--help` lists them.
 #[test]
 fn the_help_lists_two_verbs() {
     let (code, stdout, stderr) = run(&["--help"]);
@@ -100,10 +72,6 @@ fn the_help_lists_two_verbs() {
     );
 }
 
-/// (2) `--rule` emits one rule's output. Each rule alone fixes its own
-/// departure and leaves the other's alone; together they are what the
-/// unrestricted verb prints. This is the capability `normalize --emit` and
-/// `pad --emit` carried.
 #[test]
 fn rule_emits_one_rules_output() {
     let dir = scratch("emit");
@@ -124,9 +92,6 @@ fn rule_emits_one_rules_output() {
     assert_eq!(fs::read(&p).expect("read back"), BOTH, "nothing is written");
 }
 
-/// Every rule is selectable, including the two that never had a verb, and the
-/// name is the one the report tags a departure with — asserted by reading the
-/// tag out of the unrestricted report and feeding it back as `--rule`.
 #[test]
 fn every_departure_tag_is_a_rule_name() {
     let dir = scratch("tags");
@@ -175,8 +140,6 @@ fn every_departure_tag_is_a_rule_name() {
     }
 }
 
-/// An unknown rule name is refused, and the refusal names the vocabulary rather
-/// than leaving the caller to guess it.
 #[test]
 fn an_unknown_rule_name_is_refused() {
     let dir = scratch("unknown");
@@ -193,8 +156,6 @@ fn an_unknown_rule_name_is_refused() {
     );
 }
 
-/// `--rule` and `--write` are refused together: one rule's output is not normal
-/// form, and the write path is defined by normal form.
 #[test]
 fn rule_and_write_together_are_refused() {
     let dir = scratch("rule-write");
@@ -211,9 +172,6 @@ fn rule_and_write_together_are_refused() {
     assert_eq!(fs::read(&p).expect("read back"), BOTH, "nothing is written");
 }
 
-/// (3) `--check --rule` reports one rule's departures and no other's, in the
-/// coordinates of the file as it sits. This is the capability the two verbs'
-/// default (reporting) mode carried.
 #[test]
 fn check_rule_reports_one_rules_departures() {
     let dir = scratch("check");
@@ -249,8 +207,6 @@ fn check_rule_reports_one_rules_departures() {
     );
 }
 
-/// The unrestricted summary line is byte-for-byte what it was: it is a parsed
-/// surface, so adding `--rule` must not move its fields.
 #[test]
 fn the_unrestricted_summary_line_is_unchanged() {
     let dir = scratch("summary");
@@ -274,9 +230,6 @@ fn the_unrestricted_summary_line_is_unchanged() {
     );
 }
 
-/// (4) A construct a rule left verbatim is reported with no flag asked for, in
-/// both modes. The specimen holds two adjacent lists with different bullets,
-/// which the marker rule declines because unifying them would merge them.
 #[test]
 fn exemptions_are_reported_without_being_asked() {
     let dir = scratch("exempt");
@@ -317,10 +270,6 @@ fn exemptions_are_reported_without_being_asked() {
     );
 }
 
-/// A whole-document declination is reported unasked as well, and sets no exit
-/// code. The specimen is the one the gap tests pins: deleting the head
-/// whitespace would promote the leading `---` into front matter, so the gap
-/// rule's structure guard refuses the rewrite and the rule yields its input.
 #[test]
 fn a_declined_document_is_reported_and_is_not_a_failure() {
     let dir = scratch("declined");
@@ -346,9 +295,6 @@ fn a_declined_document_is_reported_and_is_not_a_failure() {
     );
 }
 
-/// `--rule` does not loosen the one-input rule: printing bytes still takes
-/// exactly one input, since concatenating two documents is not a formatting
-/// operation.
 #[test]
 fn rule_still_takes_one_input_when_printing_bytes() {
     let dir = scratch("two");

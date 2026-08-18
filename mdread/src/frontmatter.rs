@@ -1,15 +1,8 @@
-//! Frontmatter surface: the top-level field names in source order (the `fields:`
-//! line), the 1-based line at which the body begins, the block's raw text, and
-//! addressed lookup along a dotted path.
+//! Frontmatter surface: top-level field names in source order, the line the body
+//! begins on, the block's raw text, and lookup along a dotted path.
 //!
-//! mdstruct reports the frontmatter *block* span but leaves the YAML unparsed
-//! (its scope is structure, not field decomposition), so both readings live here.
-//! They are deliberately separate: the line scanner ([`block`]) reports what the
-//! file says, in source order and with source text, and is what the overview and
-//! the whole-block address print; the YAML parse ([`parsed`]) reports what the
-//! file *means*, and is what a path like `references[0].target` navigates. A
-//! leading BOM is stripped so a BOM-prefixed `---` still opens the block without
-//! shifting line numbers.
+//! mdstruct reports the frontmatter block's span but leaves the YAML unparsed,
+//! so both readings live here.
 
 use serde_yaml::Value;
 

@@ -1,92 +1,4 @@
-//! Thin CLI over the `mdformat` crate. Two verbs:
-//!   format     apply every rewriting rule in one pass and print the result, or
-//!              under `--check` report which inputs are not in normal form and
-//!              where. A CRLF or lone-CR input is reported as departing, and
-//!              formatted to LF throughout. `--rule <name>` narrows either mode
-//!              to one rule.
-//!   partition  parse each input under mdstruct's shared comrak config, tile
-//!              it with its top-level block spans, and report whether those
-//!              spans partition the file's content bytes.
-//!
-//! **This verb was called `fixpoint` until this commit.** The word was already
-//! taken, and by something more central: `fixpoint` is one of the two clauses
-//! of [`mdformat::format`]'s contract — `format(f) == f` for every `f` already
-//! normal — asserted under that name across the hand-written fixture suite,
-//! the endings tests and the table tests. A verb meaning "the block spans
-//! partition the content bytes" had no claim on it. The verb now takes the
-//! name every string it prints already uses.
-//!
-//! **`--rule` is what two verbs used to be.** `normalize` and `pad` were dry
-//! runs of the gap and table rules: each reported what its own rule would do,
-//! and emitted that rule's bytes under `--emit`. `format --check --rule gaps`
-//! is the first half and `format --rule gaps` the second — for all four rules
-//! rather than for two of them, and without a second reporting path to keep in
-//! step with `format`'s. The flag takes the name the report already tags a
-//! departure with, resolved against `format::RULES` by
-//! [`mdformat::rule_named`], so it cannot name a rule the reports do not, and
-//! a fifth rule becomes selectable without an edit here.
-//!
-//! The one thing the verbs had that the flag does not is a **refusal**:
-//! `normalize --emit` exited 4 rather than print bytes for a document whose
-//! rewrite failed the structure guard. Under `format` that is not a failure —
-//! the rule declines, yields its input, and the declination goes to stderr
-//! while the input's own bytes go to stdout. That is this crate's settled
-//! position on declinations (see [`mdformat::format`]); the verbs predate it,
-//! and a dry run that exits 4 on a document `format` calls normal is the
-//! disagreement, not the safeguard.
-//!
-//! **The corpus figures the module docs quote were measured with those verbs**,
-//! which no longer exist. The space and byte deltas in
-//! [`mdformat::table`], the gap and blank-line-site counts in
-//! [`mdformat::normalize`], and the front-matter clause withdrawn there for
-//! costing 988 of 1052 files all come from batch runs of `mdformat normalize`
-//! and `mdformat pad` over the corpus. Re-measuring any of them now means
-//! `format --check --rule <name>` and its summary line, which counts one
-//! departure per changed line: the same number `normalize` reported as a
-//! rewritten gap, and `pad`'s changed-line count rather than its table count.
-//!
-//! **No rule has a verb of its own, and none needs one.** `format --check
-//! --rule <name>` reports every departure and every declined construct for
-//! exactly one rule, tagged with it, which is the whole of what a per-rule dry
-//! run printed.
-//!
-//! Like `mdstruct check`, this takes paths and walks no directories: the
-//! corpus run is a shell pipeline, and `-` reads stdin.
-//!
-//! **One flag writes a file: `format --write`, and it rewrites exactly one.**
-//! Every other rewrite here is opt-in and reaches only stdout. `--write` takes
-//! one path a person typed, and refuses two paths, a directory, a shell glob, or
-//! stdin — see [`mdformat::write`], which holds the refusal and argues why it is
-//! code and not a README. Rewriting a batch, or rewriting anything without a
-//! person reading the result, is a separate tier this binary does not implement.
-//!
-//! Because that person is the reason the tier is allowed, `--write` reports
-//! **every** declination without being asked: each rule that declined the
-//! document, and each construct a rule left verbatim inside it.
-//!
-//! **So does every other mode of `format`, and it has no `--verbose` to ask
-//! with.** That flag used to gate the per-construct half of the report — and
-//! under `--check`, the whole-document half as well — which left the reporting
-//! mode's default output silent about exactly the refusals this crate spends
-//! its module docs arguing must be legible. Removing it costs close to nothing
-//! in lines: over this repository's 380 tracked `.md` files the report it
-//! gated is empty (zero declinations, zero exempt constructs), and over the
-//! 1056-file corpus it is **one** line, a ragged table the `tables` rule
-//! leaves verbatim. That is the whole price of never having to know to ask.
-//!
-//! `partition` keeps a `--verbose`, and it is a different flag doing a different
-//! job: it reports each **passing** file, which is noise proportional to the
-//! corpus rather than a refusal that would otherwise go unsaid.
-//!
-//! Exit codes: 0 pass, 1 I/O error, 2 an invocation this refuses — a flag
-//! combination, an unknown `--rule` name, or a `--write` target that is not one
-//! regular file — 3 input not UTF-8, 4 a file failed a check — the partition
-//! under `partition`, normal form under `format --check` — 5 a sourcepos did not
-//! name a byte range. `--write` writes nothing on any code but 0.
-//!
-//! A rule **declining** a document is not a failure and does not set an exit
-//! code: the stage passes its input through, `format --check` reports the
-//! document as normal, and the two agree because they read the same field.
+//! CLI over the `mdformat` crate.
 
 use std::io::{self, Read};
 use std::process::ExitCode;
@@ -208,13 +120,8 @@ fn main() -> ExitCode {
 }
 
 /// The rules one invocation runs: all of [`mdformat::format::RULES`], or the
-/// single one `--rule` named.
-///
-/// The name is resolved against `RULES` rather than against a list kept here,
-/// so this function needs no edit when a rule is added and cannot accept a name
-/// no report prints. An unrecognized name is a refused invocation (exit 2), not
-/// a silent fallback to every rule: a caller who asked for one rule and got
-/// four would read a report about rules it did not ask about.
+/// single one `--rule` named. An unrecognized name exits 2 rather than
+/// falling back to every rule.
 fn selected_rules(name: Option<&str>) -> Result<Vec<&'static dyn mdformat::Rule>, u8> {
     let Some(name) = name else {
         return Ok(mdformat::format::RULES.to_vec());
@@ -234,31 +141,17 @@ fn selected_rules(name: Option<&str>) -> Result<Vec<&'static dyn mdformat::Rule>
 /// Apply the selected rules in one pass, or report what stands between each
 /// input and their normal form.
 ///
-/// The two modes read the same predicate, so they cannot disagree: a rule that
-/// declines a document yields that document unchanged, which is exactly what
-/// makes `--check` call it normal. A declination is therefore reported as an
-/// exemption and sets no exit code.
-///
-/// Both modes report every declination and every exempt construct
-/// unconditionally. Under `--check` that is the only place a refusal appears at
-/// all; without it, stdout carries bytes alone, so a stage that passed its
-/// input through is invisible there and a caller taking the output would
-/// otherwise not learn the format is partial.
-///
-/// The only thing this ever writes is stdout, and only without `--check`.
-/// `--write` never reaches the loop below: it is a different verb wearing a
-/// flag, and its whole point is that it does not loop over a file list.
+/// Both modes report every declination, because a rule that passed its input
+/// through is invisible in the bytes.
 fn run_format(args: &FormatArgs) -> u8 {
     let rules = match selected_rules(args.rule.as_deref()) {
         Ok(rules) => rules,
         Err(code) => return code,
     };
     if args.write {
-        // `--write` rewrites a file to *the* normal form, which is every rule;
-        // one rule's output is by construction not that, and the fixpoint
-        // assertion guarding the write would refuse it a moment later with a
-        // message about a rule interaction that is not what happened. Refuse
-        // here instead, where the reason is the invocation.
+        // `--write` rewrites a file to the normal form, which is every rule.
+        // One rule's output is not that, so refuse here, where the reason is
+        // the invocation, rather than at the fixpoint assertion below.
         if args.rule.is_some() {
             eprintln!(
                 "mdformat: --write rewrites a file to normal form, which is every rule; \
@@ -386,18 +279,10 @@ fn run_format(args: &FormatArgs) -> u8 {
 /// Rewrite exactly one named file in place, and report everything the rules
 /// left alone.
 ///
-/// This is the only function in this binary that opens a file for writing, and
-/// it is deliberately not a loop. `run_format`'s file list is a convenience for
-/// reporting over a corpus; a rewrite over a corpus is a different act, gated on
-/// conditions this program cannot check, so the single target is taken from
-/// [`mdformat::write::target`] — which refuses two paths, a directory, a glob,
-/// and stdin — rather than from `resolve`, whose "no paths means stdin"
-/// defaulting is exactly what would let a bare `--write` pick its own target.
-///
-/// Nothing is written on any path but the last: a refused invocation, an
-/// unreadable or non-UTF-8 file, a rule that errored, an already-normal
-/// document, and an output that is not itself in normal form all leave the file
-/// byte-identical.
+/// Deliberately not a loop. The target comes from [`mdformat::write::target`],
+/// which refuses two paths, a directory, a glob and stdin, rather than from
+/// `resolve`, whose "no paths means stdin" default would let a bare `--write`
+/// pick its own target.
 fn run_write(args: &FormatArgs) -> u8 {
     if args.check {
         eprintln!(
@@ -442,14 +327,9 @@ fn run_write(args: &FormatArgs) -> u8 {
         }
     };
 
-    // A person reading the rewritten file is the reason this tier exists, and
-    // what the rules left verbatim is invisible in the result — so it is said.
-    //
-    // The line numbers address the **rewritten** file, not the file as it was.
-    // That falls out of the pipeline rather than being arranged: only `tables`
-    // and `markers` exempt individual constructs, `gaps` is the one rule that
-    // can move a line, and it runs before both of them. Which is the useful way
-    // round — the report names lines in the file about to be opened.
+    // The line numbers address the rewritten file, not the file as it was.
+    // Only `tables` and `markers` exempt individual constructs, and `gaps`, the
+    // one rule that can move a line, runs before both.
     let (declined, exempt) = report_exemptions(&display, result.declined(), result.exempt());
     let declinations = format!("{declined} rule declinations, {exempt} exempt constructs");
 
@@ -460,12 +340,9 @@ fn run_write(args: &FormatArgs) -> u8 {
     }
 
     // The last check before the one irreversible step. `format` is a retraction
-    // onto a normal form, so its output must already be a fixpoint of `check`;
-    // measured over this repository's 397 tracked markdown files, it is one for
-    // every single file. This asserts it for *this* file, at the moment the
-    // assertion is worth something, because a rule interaction that leaves the
-    // output still departing would otherwise reach disk before anyone saw it.
-    // Reaching this branch is a bug in a rule, not in the document.
+    // onto a normal form, so its output must already be a fixpoint of `check`.
+    // A rule interaction that left the output still departing would otherwise
+    // reach disk unseen. Reaching this branch is a bug in a rule.
     match mdformat::check(&result.output, &opts) {
         Ok(c) if !c.is_normal() => {
             let departures = c.departures().count();
@@ -507,12 +384,7 @@ fn run_write(args: &FormatArgs) -> u8 {
 /// Print every rule that declined the document and every construct a rule left
 /// verbatim, and return the two counts.
 ///
-/// The one reporting path for both, shared by every mode of `format` —
-/// printing, `--check` and `--write` — so a refusal reads the same wherever it
-/// is met, and no mode can grow a report the others lack. Nothing gates it: a
-/// rule that left something alone is invisible in the bytes, so the only way to
-/// learn of it is to be told, and a report that has to be asked for is one
-/// nobody asks for.
+/// The one reporting path for printing, `--check` and `--write` alike.
 fn report_exemptions<'a>(
     display: &str,
     declined: impl Iterator<Item = (&'static str, &'a str)>,

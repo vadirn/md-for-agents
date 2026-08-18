@@ -1,119 +1,7 @@
-//! Line endings: every line ending LF, and the one rewrite here that reaches
-//! inside a span on purpose.
+//! Rewrites every line ending to LF.
 //!
-//! # The normal form
-//!
-//! | in the source | emitted |
-//! | --- | --- |
-//! | `"\r\n"` | `"\n"` |
-//! | a lone `"\r"` | `"\n"` |
-//! | `"\n"` | `"\n"` |
-//!
-//! No other byte is read and no other byte is written. That is the whole rule.
-//!
-//! # Why it had to exist
-//!
-//! [`crate::normalize`] states its separators as the literals `"\n"` and
-//! `"\n\n"`, so a CRLF *gap* is already regenerated as LF. A CRLF between two
-//! lines of one paragraph is span **interior**, and the gap rule copies span
-//! interiors verbatim — so before this module, formatting a CRLF file produced
-//! a file with **both** endings in it. A formatter that leaves a document
-//! neither as it found it nor in any stated form is worse than one that
-//! declines, and no clause of any normal form asked for that output; it fell
-//! out of a rule saying nothing about line endings at all.
-//!
-//! LF is the ruling, on the ground that it is the default on the two systems
-//! this corpus lives on.
-//!
-//! # Every carriage return is a line ending
-//!
-//! This is what makes the map above **total**. CommonMark: "A line ending is a
-//! newline (U+000A), a carriage return (U+000D) not followed by a newline, or a
-//! carriage return and a following newline." There is no other role a `\r` can
-//! play — not inside a code block, not inside a code span, not inside front
-//! matter. [`crate::LineIndex`] already reads the source that way, and
-//! `lone_cr_is_a_line_ending_for_comrak_too` pins that comrak
-//! agrees against a real parse.
-//!
-//! So this rule reads no parse. It does not need one: there is no document in
-//! which "replace every carriage return" means something other than "normalize
-//! every line ending".
-//!
-//! # Why it carries no oracle, when every other rewrite here does
-//!
-//! [`crate::structure`] gates [`crate::normalize`] and [`crate::table`], and it
-//! cannot gate this one. Two candidate oracles, both refuted, and the second
-//! refutation is the interesting one.
-//!
-//! **The oracle as it stands refuses this rewrite.** Measured, not assumed:
-//! comrak stores line endings **verbatim** inside a `CodeBlock`, `HtmlBlock` and
-//! `FrontMatter` literal, and `format_html` prints them, so `rich` and `html`
-//! both differ for any CRLF document holding one —
-//! `the_structure_oracle_refuses_this_rewrite` names the specimens. Gating on it
-//! would decline nearly every real CRLF file; the gap rule would then rewrite
-//! those files' gaps to LF anyway, and the output would be mixed. That is the
-//! defect this module exists to remove, reintroduced by its own guard.
-//!
-//! **An oracle blind to the bytes this changes cannot fail.** The obvious
-//! repair is [`crate::structure`]'s own trick — [`crate::Structure::tables`] is
-//! deliberately blind to the delimiter row's dash run, the one byte sequence
-//! table padding is defined to change — so: compare the two parses with every
-//! `\r` mapped out of both. But `to_lf` changes **only** `\r` bytes, so after
-//! that mapping the two sides are the parses of the same string, and the
-//! comparison is `None` for every input, forever. A guard that cannot fail is a
-//! green light of unknown meaning, and this crate has already shipped three of
-//! those (reassembly equality, the unary partition oracle, the derived
-//! predicate). Adding a fourth to look guarded would be the worst of the
-//! available options.
-//!
-//! The difference between this rule and the other two is not that it is safer to
-//! run. It is that its effect is **fully determined by its own statement**. A
-//! gap rewrite's effect depends on the document — deleting blank lines promotes
-//! a leading `---` into front matter — so it needs a witness that reads the
-//! document. This rewrite's effect does not depend on the document at all, so
-//! there is nothing for a witness to read.
-//!
-//! What replaces the guard is a measurement, in the endings tests: over CRLF
-//! specimens covering every block shape the crate knows, the block skeleton and
-//! every table's source shape survive **identically**, and the rendered HTML
-//! survives identically once the `\r`s are read out of it the way an HTML parser
-//! reads them out — with exactly one exception, which the next section quotes
-//! and which is a repair rather than a loss.
-//!
-//! # What the render differences actually are
-//!
-//! Four shapes make `structure_of` differ, and three of the four are invisible
-//! to a renderer:
-//!
-//! - a **fenced or indented code block**'s literal, `"code\r\n"` → `"code\n"`,
-//!   printed into `<pre><code>`;
-//! - an **HTML block**'s literal, likewise;
-//! - **front matter**'s literal, which reaches no render at all;
-//! - a **code span** crossing a line: comrak renders `` `co\r\nde` `` as
-//!   `<code>co\r de</code>` and `` `co\nde` `` as `<code>co de</code>`.
-//!
-//! The HTML spec normalizes `\r\n` and `\r` to `\n` during input preprocessing,
-//! before any element sees them, so the first three change no rendered
-//! character. The fourth is the one place the rewrite changes what a reader
-//! sees, and it changes it **toward** the specification: CommonMark converts each
-//! line ending in a code span to one space, `\r\n` is one line ending, and
-//! `co de` is the conforming render that comrak produces only after this rule
-//! has run.
-//!
-//! # Why it runs first
-//!
-//! [`crate::format::RULES`] puts this at the head, so no later rule
-//! ever sees a `\r`.
-//!
-//! Not for the output's sake: the endings rule reaches the same bytes from any
-//! position in the pipeline, because the gap rule regenerates its separators as
-//! LF wherever it runs. It is for the **specification's** sake. Neither of the
-//! other two rules states anything about a carriage return — the gap rule's
-//! normal form is a table of LF literals, the table rule's is a table of widths —
-//! so whatever they do with one is incidental rather than specified. Running the
-//! canonicalization first means that question belongs to exactly one rule, and
-//! that every later rule's span interiors are CR-free. The discipline they rely
-//! on is **strengthened**, not weakened, by the one rule that breaks it.
+//! Reads no parse: CommonMark makes every `\r` a line ending, in a code block
+//! and front matter as much as anywhere else.
 
 use crate::span::LineIndex;
 
@@ -133,8 +21,8 @@ pub struct EndingChange {
 /// The LF rewrite of one document: the bytes, and every ending that changed.
 ///
 /// Unlike [`crate::Normalization`] and [`crate::Padding`] this has no
-/// `accepted`, because it has no guard to clear — see the module docs for why
-/// a guard here would be either wrong or vacuous.
+/// `accepted`: the rewrite's effect is fixed by its own statement rather than
+/// by the document, so there is nothing for a guard to read.
 #[derive(Debug, Clone)]
 pub struct LineEndings {
     /// The rewritten bytes. Holds no `\r`.
@@ -153,8 +41,8 @@ impl LineEndings {
 /// Rewrite every line ending in `source` to LF.
 ///
 /// Total and context-free: it reads no parse, takes no options, and cannot
-/// fail. Every `\r` is a line ending (see the module docs), so `\r\n` and a
-/// lone `\r` each become one `\n` and every other byte is copied.
+/// fail. Every `\r` is a CommonMark line ending, so `\r\n` and a lone `\r`
+/// each become one `\n` and every other byte is copied.
 pub fn to_lf(source: &str) -> LineEndings {
     let bytes = source.as_bytes();
     let idx = LineIndex::new(source);

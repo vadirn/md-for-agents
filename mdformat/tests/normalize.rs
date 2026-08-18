@@ -1,25 +1,5 @@
 //! Blank-line normalization: the normal form, and every hazard that decided
 //! its shape.
-//!
-//! Same fixture discipline as the partition fixtures: every specimen is an embedded
-//! byte literal, never an on-disk `.md` file. That matters more here than
-//! anywhere else in the crate — these specimens are *about* whitespace, and a
-//! specimen on disk is one formatting pass away from having exactly the
-//! whitespace under test rewritten out of it.
-//!
-//! The file has three parts.
-//!
-//! 1. **The normal form**, stated as input/output pairs.
-//! 2. **The hazards the guard must refuse.** Each one changes the parse, and
-//!    each one *passes the partition oracle* — which is the whole argument for
-//!    landing re-parse structural equivalence alongside the feature rather than
-//!    after it. `the_partition_oracle_accepts_every_refused_specimen` asserts
-//!    that jointly, so nobody can conclude the existing oracle was enough.
-//! 3. **The refuted hazards**, pinned anyway. A setext underline, a loose or
-//!    tight list, and a hard line break are all safe under a gap-only rule
-//!    because their whitespace is span *interior*. That safety is a property of
-//!    "top-level gaps only", not of the constructs, so a future recursive rule
-//!    has to break a test here before it can break a document.
 
 use comrak::Arena;
 use comrak::nodes::NodeValue;
@@ -29,9 +9,6 @@ fn opts() -> mdstruct::Options {
     mdstruct::Options::default()
 }
 
-/// Every specimen enters as bytes and is checked to be UTF-8 here, so a literal
-/// can hold whatever whitespace the case needs without a string escape hiding
-/// it.
 fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("specimen is UTF-8")
 }
@@ -40,8 +17,6 @@ fn norm(source: &str) -> Normalization {
     normalize(source, &opts()).unwrap_or_else(|e| panic!("sourcepos errors: {e:?}"))
 }
 
-/// The normalized bytes, asserting the guard cleared. Panics with the
-/// structural difference otherwise, so a failure names the construct.
 fn accept(source: &str) -> String {
     let n = norm(source);
     match n.accepted() {
@@ -56,10 +31,6 @@ fn accept(source: &str) -> String {
     }
 }
 
-/// The candidate bytes of a normalization the guard **refused**, plus the
-/// difference that refused it. Panics when the guard let it through, so a
-/// specimen that stops being a hazard is a failure to explain rather than
-/// silence.
 fn refuse(source: &str) -> (String, mdformat::StructureDiff) {
     let n = norm(source);
     assert!(
@@ -97,8 +68,7 @@ const NORMAL_FORM: &[(&str, &[u8], &[u8])] = &[
     // empty rather than becoming one byte.
     ("empty", b"", b""),
     ("whitespace-only", b"\n \n\t\n", b""),
-    // Front matter takes one blank line like any other block: the corpus's
-    // existing convention, codified.
+    // Front matter takes one blank line like any other block.
     (
         "frontmatter-normal",
         b"---\nk: v\n---\n\nbody\n",
@@ -147,9 +117,6 @@ fn the_normal_form_is_what_it_says() {
     }
 }
 
-/// The normal form is a fixpoint of itself: normalizing twice equals
-/// normalizing once. Without this, "normal form" would be a name rather than a
-/// property.
 #[test]
 fn normalization_is_idempotent() {
     for (name, input, _) in NORMAL_FORM {
@@ -158,10 +125,6 @@ fn normalization_is_idempotent() {
     }
 }
 
-/// Only separators are synthesized: every byte inside a block's content span is
-/// copied verbatim, so the concatenation of the source's content bytes is
-/// invariant. This is the property that makes the rewrite reviewable — a
-/// failure means the rule reached inside a block.
 #[test]
 fn no_content_byte_is_added_removed_or_reordered() {
     let content = |s: &str| -> String {
@@ -183,13 +146,6 @@ fn no_content_byte_is_added_removed_or_reordered() {
 // 2. Hazards the guard must refuse
 // ---------------------------------------------------------------------------
 
-/// Deleting the head whitespace can promote a leading `---` into front matter,
-/// because front matter is recognized only at byte 0. Two rendered blocks
-/// become invisible metadata: the whole document changes meaning.
-///
-/// This is a hazard of the *head* rule, which the four stated rules do not
-/// mention at all. Corpus exposure is zero, which is exactly why it has to be a
-/// fixture — the corpus cannot exercise it.
 #[test]
 fn deleting_head_whitespace_can_promote_a_thematic_break_into_front_matter() {
     let src = utf8(b"\n\n---\nk: v\n---\n");
@@ -207,11 +163,6 @@ fn deleting_head_whitespace_can_promote_a_thematic_break_into_front_matter() {
     assert!(!diff.kinds_same && !diff.rich_same && !diff.html_same);
 }
 
-/// The causal control: the same `---` behind *inline* whitespace rather than
-/// blank lines. The indent is a line prefix, so the span extends left over it
-/// and it never enters a gap; nothing is deleted, nothing is promoted, and the
-/// normalization is accepted. The differing factor is that the head whitespace
-/// spans whole lines, not that a `---` is present.
 #[test]
 fn the_same_dashes_behind_a_line_indent_are_left_alone() {
     let src = utf8(b"  ---\nk: v\n---\n");
@@ -227,15 +178,6 @@ fn the_same_dashes_behind_a_line_indent_are_left_alone() {
     );
 }
 
-/// Inserting a blank line can make a link reference definition *disappear*.
-/// With no blank line comrak declines to consume `[a]: /x` and renders it as
-/// text; once a blank line separates it from the table it is consumed, the node
-/// vanishes, and the text is gone from the render.
-///
-/// This is the sharpest available demonstration that the partition does not
-/// guard this feature: `fill_dropped_link_reference_definitions` re-claims the
-/// line, so the output partitions cleanly while a rendered block has been
-/// deleted.
 #[test]
 fn inserting_a_blank_line_can_delete_a_link_reference_definition_from_the_render() {
     let src = utf8(b"seed\n\n[a]: /x\n| a | b |\n| - | - |\n| 1 | 2 |\n");
@@ -273,13 +215,6 @@ fn inserting_a_blank_line_can_delete_a_link_reference_definition_from_the_render
     assert!(!diff.kinds_same);
 }
 
-/// An unterminated fence's literal absorbs the blank lines that follow it, so
-/// the trailing-newline rule eats code-block *content*.
-///
-/// This is the specimen that refutes kinds-only comparison from inside the
-/// implementation rather than by argument: the block skeleton is identical
-/// before and after — one `codeBlock` — and only the node's attributes and the
-/// rendered HTML change.
 #[test]
 fn an_unterminated_fence_loses_content_and_kinds_alone_would_not_notice() {
     let src = utf8(b"```\ncode\n\n\n");
@@ -293,14 +228,6 @@ fn an_unterminated_fence_loses_content_and_kinds_alone_would_not_notice() {
     assert!(!diff.html_same);
 }
 
-/// Two documents whose block kinds *and* rendered HTML agree while the rich
-/// signature does not. A 1–3 space indent sets `marker_offset`, which no
-/// renderer shows.
-///
-/// This is why the oracle carries all three signatures. The rewrite itself does
-/// not produce this pair — the span's left extension preserves such indents —
-/// so the case is pinned at the signature level, where it is a property of the
-/// oracle rather than of the rule.
 #[test]
 fn kinds_and_html_agree_where_the_rich_signature_does_not() {
     let indented = structure_of(utf8(b"  - item\n"), &opts());
@@ -314,12 +241,6 @@ fn kinds_and_html_agree_where_the_rich_signature_does_not() {
     );
 }
 
-/// The joint claim, asserted rather than argued: **every** specimen the
-/// structure guard refuses still satisfies the partition oracle, on both sides
-/// of the rewrite. The partition is a unary invariant of one document — it
-/// never compares two — so it cannot distinguish a faithful rewrite from an
-/// unfaithful one, and shipping this feature on it alone would have shipped
-/// every hazard above.
 #[test]
 fn the_partition_oracle_accepts_every_refused_specimen() {
     let refused: &[&[u8]] = &[
@@ -347,15 +268,6 @@ fn the_partition_oracle_accepts_every_refused_specimen() {
 // 3. The indented-code fix
 // ---------------------------------------------------------------------------
 
-/// A top-level indented code block, reduced from the corpus's only exposed file
-/// line 14 — the corpus's only file whose parse the unrepaired rule changed.
-///
-/// comrak reports the block's sourcepos starting at **column 5**, so its
-/// four-space indent belongs to no span. Left in the gap, deleting it turns a
-/// `CodeBlock` whose text begins `- ` into a `List > Item > Paragraph`. The
-/// repair is the content span's left extension, and this asserts both halves:
-/// the parser defect, so a comrak release that fixes it shows up here as a
-/// failure to explain, and the resulting no-op.
 #[test]
 fn a_top_level_indented_code_block_keeps_its_indent() {
     let src = utf8(
@@ -383,11 +295,6 @@ fn a_top_level_indented_code_block_keeps_its_indent() {
     );
 }
 
-/// The causal control for the test above, and the reason "exclude `CodeBlock`
-/// spans from tightening" was refuted: the indent is what carries the meaning,
-/// and it is outside comrak's span before any tightening happens. Delete it by
-/// hand and the same bytes parse as a list — so the repair has to be on the
-/// span, not on the trim.
 #[test]
 fn the_same_block_without_its_indent_is_a_list_not_a_code_block() {
     let src =
@@ -404,10 +311,6 @@ fn the_same_block_without_its_indent_is_a_list_not_a_code_block() {
     );
 }
 
-/// Trailing whitespace on a code block's last line is content: the literal is
-/// `"code   \n"`. The stated rule governs "an otherwise-blank line", so trailing
-/// whitespace on a *content* line is out of scope and stays — which is what the
-/// content span's right extension implements.
 #[test]
 fn trailing_whitespace_on_a_content_line_is_not_a_gap() {
     let src = utf8(b"seed\n\n    code   \n");
@@ -428,11 +331,6 @@ fn trailing_whitespace_on_a_content_line_is_not_a_gap() {
     );
 }
 
-/// A 1–3 space indent is legal, sets `marker_offset`/`fence_offset`, and sits
-/// outside the block's sourcepos for the same reason a four-space indent does.
-/// Generalizing the left extension to every block — rather than to code blocks
-/// only — is what keeps these render-identical, attribute-changing rewrites from
-/// happening at all, instead of happening and being refused.
 #[test]
 fn a_one_to_three_space_block_indent_survives() {
     for src in [
@@ -449,11 +347,6 @@ fn a_one_to_three_space_block_indent_survives() {
 // 4. Refuted hazards, pinned anyway
 // ---------------------------------------------------------------------------
 
-/// A setext heading's underline is *inside* its span: `Title\n---` is one
-/// `Heading(setext: true)` covering both lines, so the newline before `---` is
-/// span interior and a gap-only rule cannot reach it. Were it reachable,
-/// inserting a blank line would split the heading into a paragraph and a
-/// thematic break.
 #[test]
 fn a_setext_underline_is_span_interior() {
     let src = utf8(b"Title\n---\n\nbody\n");
@@ -470,10 +363,6 @@ fn a_setext_underline_is_span_interior() {
     );
 }
 
-/// Loose and tight lists both survive, for the same reason: a list's span
-/// covers all its items, so the blank line between two items is interior. A
-/// recursive "one blank line between blocks" would loosen all 2532 tight lists
-/// in the corpus, which is the reduction to absurdity of the recursive rule.
 #[test]
 fn list_tightness_is_not_reachable_from_a_top_level_gap() {
     let loose = utf8(b"- a\n\n- b\n");
@@ -488,10 +377,6 @@ fn list_tightness_is_not_reachable_from_a_top_level_gap() {
     );
 }
 
-/// A hard line break is two trailing spaces, and they sit *between* a
-/// paragraph's first and last content byte — span interior again. This is the
-/// case that separates "trim trailing whitespace everywhere", which deletes the
-/// corpus's 6 hard breaks, from "rewrite gaps only", which deletes none.
 #[test]
 fn a_hard_line_break_survives_a_collapsed_gap_beside_it() {
     let src = utf8(b"line one  \nline two\n\n\nnext\n");
@@ -506,10 +391,6 @@ fn a_hard_line_break_survives_a_collapsed_gap_beside_it() {
     assert_eq!(breaks, 1, "the hard break must survive");
 }
 
-/// Blank lines inside a block quote are interior too, and the corpus has none
-/// at that position. Pinned because the *separator* inside a quote is `>`, not
-/// an empty line — the reason the rule cannot recurse: `> a\n>\n> b` is one
-/// quote and `> a\n\n> b` is two.
 #[test]
 fn a_blockquotes_interior_is_untouched_while_the_gap_beside_it_collapses() {
     let src = utf8(b"> a\n>\n> b\n\n\n> c\n");
@@ -528,14 +409,6 @@ fn a_blockquotes_interior_is_untouched_while_the_gap_beside_it_collapses() {
 // 5. Preconditions
 // ---------------------------------------------------------------------------
 
-/// The partition's actual contribution: it is what makes "the gap" definable.
-/// Every byte between two content spans is whitespace *because* no span claims
-/// it and the partition forbids unclaimed content. On an input that fails the
-/// partition that reasoning is void, so `normalize` refuses to rewrite at all
-/// rather than deleting bytes it cannot account for.
-///
-/// The specimen is the negative-control suite's indented-code-in-the-last-list-item
-/// shape, whose content genuinely lands in no span.
 #[test]
 fn an_input_that_fails_the_partition_is_not_rewritten() {
     let src = utf8(

@@ -1,40 +1,8 @@
-//! The comment-anchor overlay scanner. Always-on and complete:
-//! every recognised `<!-- <label>[: <info>] -->` … `<!-- /<label> -->` pair is
-//! emitted into `regions[]`; consumers filter by label. A region references a
-//! span WITHOUT disturbing structure (the interior is still parsed into
-//! `nodes[]`/`headings[]`), may overlap freely, and is excluded from tiling.
+//! The comment-anchor overlay scanner.
 //!
-//! Recognition is a single raw byte scan for single-line `<!-- … -->` comments
-//! over the whole source, masked by fenced-code + indented-code + inline-code
-//! spans plus multi-line HTML-comment blocks (comrak is consulted only to build
-//! that mask, never to enumerate anchors). Multi-line HTML comments are not
-//! anchors (single-line only — pinned convention).
-//!
-//! Mask reliability. The block-level masks (fenced/indented code, multi-line
-//! HTML comment) rest on comrak's block sourcepos, which is exact — an anchor
-//! buried in any of them is reliably inert. The inline-code (`NodeValue::Code`)
-//! mask instead tracks comrak's INLINE sourcepos, which is not always exact.
-//! Its failure mode is one-sided: an imprecise inline-code span can only over-
-//! or under-cover an anchor that is ALREADY inside inline code, so it may
-//! mis-suppress a real anchor but can never fabricate one from live prose. That
-//! blast radius is narrow and the failure is safe (a dropped region, not a
-//! phantom), so this is accepted, not hardened. The one multi-line blind spot
-//! that WAS a genuine phantom-region source — anchor-looking text on a
-//! continuation line of a multi-line HTML comment — is now handled by the
-//! multi-line HTML-comment mask (build.rs).
-//!
-//! Span convention — pinned per endpoint, not per pair:
-//!   `span.start`/`body_span.start` follow the OPEN's class;
-//!   `span.end`/`body_span.end` follow the CLOSE's class.
-//!   - whole-line endpoint (an anchor that is the entire trimmed line): the
-//!     line-based convention, byte-identical to the pre-rewrite scanner —
-//!     span.start = line_start(open), body start = line_start(open+1);
-//!     span.end = next_line_start(close), body end = line_start(close).
-//!   - inline endpoint (an anchor embedded in a text run): byte-offset spans —
-//!     span.start = open.start_byte, body start = open.end_byte;
-//!     span.end = close.end_byte, body end = close.start_byte.
-//!
-//! `start_line`/`end_line` are the lines the open/close anchor offsets fall on.
+//! Emits every `<!-- <label>[: <info>] -->` … `<!-- /<label> -->` pair into
+//! `regions[]`; consumers filter by label. A region may overlap any other, does
+//! not disturb structure, and is excluded from tiling.
 
 use super::model::{Region, Span};
 use super::span::LineIndex;

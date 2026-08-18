@@ -1,122 +1,5 @@
-//! List markers: an **opt-in** rewrite that unifies every bullet to `-` and
-//! every ordered-list delimiter to `.`.
-//!
-//! Nothing here runs unless a caller asks for it, and nothing here writes a
-//! file — the posture [`crate::normalize`] and [`crate::table`] take. [`unify`]
-//! returns a candidate; [`Unification::accepted`] is the only accessor that
-//! hands out its bytes, and it returns `None` unless both guards cleared.
-//!
-//! # The normal form
-//!
-//! - a bullet list item is introduced by `-`, never by `*` or `+`;
-//! - an ordered list item's number is followed by `.`, never by `)`.
-//!
-//! That is the whole of it. The **ordinals are not touched** — `3.` stays `3.`
-//! and a list numbered `1. 1. 1.` stays that way — and neither is a marker's
-//! indentation, its trailing padding, or the content column it establishes.
-//! Every edit this rule makes is a single ASCII byte replaced by another single
-//! ASCII byte, so the rewrite preserves the file's length, its line count, and
-//! every column in it. [`marker_violation`] is that statement as a guard.
-//!
-//! # This rule is preservative, and that is the point
-//!
-//! A census found the corpus unanimous: 10 958 of 10 958 bullet
-//! items already use `-`, 2519 of 2519 ordered items already use `.`, and no
-//! file mixes markers. So the expected corrective effect was **zero files**,
-//! and zero was the pass condition rather than an argument that the rule is
-//! idle. A formatter mostly enforces what is already true; that is what having
-//! one is for.
-//!
-//! The census was a script, and one of that script's other counts had already
-//! been found wrong, so the prediction was **re-measured against this rule**
-//! rather than inherited:
-//!
-//! - the measured corpus (files its ignore rules admit): **0** departures,
-//!   **0** declined constructs;
-//! - the same corpus with `--no-ignore`: **1** file, 5 departures — all `+`
-//!   bullets in a single scraped web page, and 0 declined constructs
-//!   anywhere.
-//!
-//! That one file is the argument for the rule stated as evidence rather than as
-//! a forecast. It is not corpus prose; it is content that arrived from outside,
-//! carrying the marker its source used. Drift has real entry points — pasted
-//! content, other tools, and agents writing into the corpus all emit `*` bullets
-//! routinely — and this rule closes them.
-//!
-//! The **zero declined constructs** is the key half, because it
-//! says the declination path has no corpus exposure at all. Every clause of it
-//! is exercised by this module's tests, the marker tests and
-//! the hand-written fixture suite, and nowhere else.
-//!
-//! # The structural hazard, and the construct this declines
-//!
-//! In CommonMark a change of bullet character **starts a new list**. So
-//!
-//! ```text
-//! - a
-//! + b
-//! ```
-//!
-//! is two lists, and unifying the markers splices them into one. The same holds
-//! for `1.` against `1)`. The rule is therefore a safe no-op wherever
-//! neighbouring lists already agree, and structurally destructive in exactly
-//! the mixed case it exists to address.
-//!
-//! The resolution is the per-construct declination [`crate::table::pad`] uses
-//! for a ragged table: two **adjacent sibling lists** of the same kind whose
-//! markers differ are both left verbatim, and both are reported. Adjacency is
-//! read off the tree, so it holds inside a block quote and inside a list item
-//! as well as at the top level — nested siblings merge on the same rule.
-//!
-//! Declining leaves the document *normal*, by the derivation
-//! [`crate::format`] states: a construct the rule does not edit contributes no
-//! departure. Declining is also idempotent, since the pair stays mixed and
-//! stays declined on every later pass.
-//!
-//! # The two guards
-//!
-//! 1. **Re-parse structural equivalence** ([`crate::structure`]), through
-//!    [`crate::structure::Structure::diff_ignoring_markers`]. Unlike the gap
-//!    rule this one rewrites **content** bytes, so it cannot inherit the gap
-//!    rule's argument that it only ever touches whitespace outside every span;
-//!    it is in [`crate::table::pad`]'s class and needs the oracle. The
-//!    exemption in the name is exactly the `markers` signature, which this
-//!    rewrite is defined to change; `kinds`, `rich`, `html` and `tables` all
-//!    still apply, and `kinds` is what catches a merge.
-//!
-//!    The adjacency declination above and this guard are not redundant. The
-//!    declination is per-construct and keeps the rest of the document
-//!    formattable; the guard is whole-document and catches a merge the
-//!    adjacency check has no way to see. `+ + +` is the specimen: three nested
-//!    single-item bullet lists, none of them adjacent to a sibling, whose
-//!    unified form `- - -` is a **thematic break**. Nothing about adjacency
-//!    predicts that; the `kinds` comparison refuses it.
-//!
-//! 2. **The substitution oracle**, [`marker_violation`]: the output has the
-//!    input's length, and every byte that differs went from `*` or `+` to `-`,
-//!    or from `)` to `.`. It reads the two byte strings and nothing else — not
-//!    the edit list it is checking — so a splice that wrote the right byte at
-//!    the wrong offset fails it.
-//!
-//!    It is not redundant with guard 1, and the reason is the exemption guard 1
-//!    carries: markers are exactly what that oracle is blind to, so a unifier
-//!    that settled on `*` instead of `-` passes it with nothing to report. This
-//!    oracle states a **direction**, not a set of characters, and it is the
-//!    only thing between this rule and a silently reversed normal form.
-//!    `only_the_substitution_oracle_can_see_which_marker_was_chosen`
-//!    is that measurement.
-//!
-//!    What it cannot decide on its own is whether a changed byte was a list
-//!    marker at all; a `*` turned into a `-` inside a paragraph or a code block
-//!    satisfies it, and guard 1 is what refuses that. The two are complementary
-//!    in both directions, which is why both are here.
-//!
-//! Neither guard can settle the *choice* of `-` over `*`, and no guard could:
-//! every candidate marker produces the same parse and the same render, so both
-//! all the oracles can do is hold the crate to whichever choice was made. That
-//! choice
-//! is settled by the census above, and the hand-written fixture suite pins it in
-//! hand-written bytes.
+//! Opt-in rewrite unifying every bullet to `-` and every ordered delimiter to
+//! `.`, gated by re-parse structural equivalence.
 
 use comrak::nodes::{AstNode, ListDelimType, ListType, NodeList, NodeValue};
 
@@ -312,11 +195,8 @@ fn list_of<'a>(node: &'a AstNode<'a>) -> Option<NodeList> {
 /// Whether a sibling list sits immediately beside this one and would merge with
 /// it once both markers are unified.
 ///
-/// Both members of a mixed pair see each other — the scan looks left and right —
-/// so both are declined and both are reported, which is what keeps the
-/// declination symmetric. Two neighbouring lists of the same kind whose markers
-/// already agree are left to the rewrite: it is a no-op on them, so it cannot
-/// be what merges them.
+/// The scan looks both ways, so both members of a mixed pair are declined and
+/// reported.
 fn mixed_neighbour<'a>(node: &'a AstNode<'a>, list: &NodeList) -> Option<ListSkipReason> {
     let here = current(list);
     for neighbour in [node.previous_sibling(), node.next_sibling()]
@@ -529,8 +409,7 @@ pub fn unify(source: &str, opts: &mdstruct::Options) -> Result<Unification, Vec<
     // Byte replacement rather than a splice: every edit is one ASCII byte for
     // another at an offset the source was read at, so the buffer stays valid
     // UTF-8 and the file's length, line count and columns are preserved by
-    // construction. `marker_violation` holds that claim as a guard rather than
-    // leaving it to this comment.
+    // construction.
     let mut bytes = source.as_bytes().to_vec();
     let mut changes = Vec::with_capacity(edits.len());
     for e in &edits {

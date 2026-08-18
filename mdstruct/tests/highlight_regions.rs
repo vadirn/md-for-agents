@@ -1,13 +1,5 @@
-//! Synthetic `highlight_<uid>` fixtures — plan Phase C's pre-producer validation
-//! (Q3). `highlight` itself is not built; these exist purely to validate the
-//! region engine's inline byte-offset extraction against a second consumer
-//! shape before any real producer exists. the region tests (step 5) already
-//! covers single-label inline recognition, inline-code/fence inertness,
-//! single-pair cross-block pairing, whole-line S7 parity, and the no-flag
-//! always-on contract — this file's net-new scope is strictly multi-region
-//! geometry: distinct-label interleaving and reused-label LIFO nesting, both
-//! built from mid-run (non-whole-line) anchors, plus a highlight-flavored
-//! cross-block pair.
+//! Synthetic `highlight_<uid>` fixtures, validating the region engine's inline
+//! byte-offset extraction against a second consumer shape.
 
 use mdstruct::{Options, Span, parse, verify_spans};
 
@@ -15,17 +7,10 @@ fn slice(src: &str, span: Span) -> &str {
     &src[span.start..span.end]
 }
 
-/// A region's span nests another's iff it fully contains it. Local copy of the
-/// (private) `verify::nests` predicate, used here to assert the negative case
-/// (crossing, not nesting) as well as the positive case (LIFO nesting).
 fn nests(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }
 
-/// (a) Two DISTINCT labels whose inline spans interleave: open A, open B,
-/// close A, close B. Per-label LIFO pairing is blind to other labels, so A
-/// closes on the first `/highlight_a` regardless of B's still-open span —
-/// the two regions cross rather than nest.
 #[test]
 fn distinct_labels_interleave_not_nest() {
     let src = "Lead <!-- highlight_a -->alpha <!-- highlight_b -->beta\
@@ -72,10 +57,6 @@ fn distinct_labels_interleave_not_nest() {
     assert_eq!(b.end_line, 1);
 }
 
-/// (b) A reused label nests via LIFO: open `highlight_x`, open `highlight_x`,
-/// close, close. The first close pops the most recently pushed (inner) open;
-/// the second close pairs with the outer open — producing two regions of the
-/// SAME label where one fully nests the other.
 #[test]
 fn reused_label_nests_lifo() {
     let src = "<!-- highlight_x -->outer <!-- highlight_x -->inner\
@@ -124,9 +105,6 @@ fn reused_label_nests_lifo() {
     assert_eq!(inner.end_line, 1);
 }
 
-/// (c) + (d) A highlight-labeled open and close sitting in different blocks —
-/// open mid-paragraph, close mid-list-item, separated by a blank line — with
-/// mid-run (non-whole-line) byte offsets at both ends.
 #[test]
 fn highlight_pair_crosses_blocks() {
     let src = "Para one <!-- highlight_y -->start of span.\n\n\

@@ -1,60 +1,12 @@
 //! Golden corpus for the `mdread` CLI.
 //!
-//! Every address form and flag combination the reader answers to is invoked
-//! against a committed fixture, and the three things a caller can observe —
-//! stdout, stderr, and the exit code — are recorded in three separate files
-//! under `tests/golden/`. Separate files because the contract is not "the
-//! output is unchanged" but the sharper "stdout stays byte-identical while
-//! stderr may carry a note": a reserved reading served over a live shadow
-//! writes to stderr precisely so the payload on stdout is untouched, and a
-//! combined recording would hide the distinction the code exists to make.
-//!
-//! The corpus drives the real binary through `std::process::Command`, not the
-//! library API, so clap's own parse errors and the process exit code are
-//! inside the contract too.
-//!
-//! # Regenerating
-//!
-//! One command re-records every case:
-//!
-//! ```text
-//! UPDATE_GOLDEN=1 cargo test -p mdread --test golden
-//! ```
-//!
-//! In this repo's nix shell:
-//!
-//! ```text
-//! nix-shell --run "CARGO_HOME=\$TMPDIR/cargo UPDATE_GOLDEN=1 cargo test -p mdread --test golden"
-//! ```
-//!
-//! Re-recording rewrites the three files of every case, prunes recordings whose
-//! case is gone, and rewrites `tests/golden/MANIFEST.txt`. Read the resulting
-//! `git diff` before committing: a corpus is only a net if each change to it
-//! was intended.
-//!
-//! # Machine independence
-//!
-//! `mdread` prints the file path it was given as the overview's first line and
-//! as the `path` field in JSON, so an absolute path would pin the recordings to
-//! one checkout. The child process therefore runs with its working directory
-//! set to `tests/` and is handed a relative `fixtures/<name>.md`, which is what
-//! it echoes back. Nothing else in the output varies by machine: the token
-//! counts are computed, and the one OS-supplied string (`No such file or
-//! directory (os error 2)`) is identical on Linux and macOS.
-//!
-//! # Editing fixtures
-//!
-//! `tests/fixtures/dialects.md` is byte-sensitive: it carries a setext heading
-//! and ATX headings indented two and three spaces, which is what makes
-//! `--strict-headings` disagree with the default dialect. A Markdown formatter
-//! would normalize all three away. Keep it out of any format-on-write path.
+//! Each invocation records stdout, stderr and the exit code in three separate
+//! files, so a change to one is not masked by the others.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// One recorded invocation: a file-name stem for its recordings, and the argv
-/// that follows the program name.
 type Case = (&'static str, &'static [&'static str]);
 
 /// The corpus. Grouped by fixture; every group covers the address forms that
@@ -243,8 +195,6 @@ fn golden_dir() -> PathBuf {
     tests_dir().join("golden")
 }
 
-/// Run the real binary and return its three streams, the exit code rendered as
-/// its own one-line recording.
 fn invoke(args: &[&str]) -> (String, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_mdread"))
         .args(args)
@@ -270,7 +220,6 @@ fn invoke(args: &[&str]) -> (String, String, String) {
     )
 }
 
-/// The fixture an invocation reads, for the failure report.
 fn fixture_of<'a>(args: &[&'a str]) -> &'a str {
     args.iter()
         .copied()
@@ -278,9 +227,6 @@ fn fixture_of<'a>(args: &[&'a str]) -> &'a str {
         .unwrap_or("(no file)")
 }
 
-/// A line-oriented diff of the divergent span with three lines of context on
-/// each side. Split on `\n` rather than by `lines()` so a difference in the
-/// trailing newline shows up as a trailing empty line rather than vanishing.
 fn diff(expected: &str, actual: &str) -> String {
     const CONTEXT: usize = 3;
     const MAX: usize = 40;
@@ -331,7 +277,6 @@ fn diff(expected: &str, actual: &str) -> String {
     out
 }
 
-/// One divergence, named well enough to act on without opening this file.
 fn report(name: &str, args: &[&str], stream: &str, expected: &str, actual: &str) -> String {
     format!(
         "case '{name}': stream {stream} diverged\n  \
