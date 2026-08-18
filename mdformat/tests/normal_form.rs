@@ -94,10 +94,10 @@
 //!
 //! **Nearly the whole marker rule is in that class**, and the exact figure was
 //! measured against the rule rather than taken from the census that motivated
-//! it. Over the vault corpus it changes **0** files; with `--no-ignore` it
+//! it. Over the measured corpus it changes **0** files; unrestricted, it
 //! changes **1**, a scraped web page carrying `+` bullets. So
-//! its corrective clause has one live specimen in the whole vault, and its
-//! **declinations have none**: no vault file holds a mixed adjacent pair, and
+//! its corrective clause has one live specimen in the corpus, and its
+//! **declinations have none**: no measured file holds a mixed adjacent pair, and
 //! none holds the nested `+ + +` whose unified form is a thematic break. Both
 //! are exercised by this file and by `tests/markers.rs` and nowhere else.
 //!

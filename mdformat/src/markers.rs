@@ -31,11 +31,11 @@
 //! been found wrong, so the prediction was **re-measured against this rule**
 //! rather than inherited:
 //!
-//! - the vault corpus (files the vault's ignore rules admit): **0**
-//!   departures, **0** declined constructs;
+//! - the measured corpus (files its ignore rules admit): **0** departures,
+//!   **0** declined constructs;
 //! - the same corpus with `--no-ignore`: **1** file, 5 departures — all `+`
-//!   bullets in `.firecrawl/tomshardware-flash.md`, a scraped web page, and 0
-//!   declined constructs anywhere.
+//!   bullets in a single scraped web page, and 0 declined constructs
+//!   anywhere.
 //!
 //! That one file is the argument for the rule stated as evidence rather than as
 //! a forecast. It is not vault prose; it is content that arrived from outside,

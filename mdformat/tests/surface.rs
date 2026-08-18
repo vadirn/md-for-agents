@@ -249,9 +249,8 @@ fn check_rule_reports_one_rules_departures() {
     );
 }
 
-/// The unrestricted summary line is byte-for-byte what it was — downstream
-/// tooling parses it, and adding `--rule` to the surface must not move its
-/// fields.
+/// The unrestricted summary line is byte-for-byte what it was: it is a parsed
+/// surface, so adding `--rule` must not move its fields.
 #[test]
 fn the_unrestricted_summary_line_is_unchanged() {
     let dir = scratch("summary");
