@@ -9,12 +9,12 @@ use std::ops::Range;
 
 use anyhow::{Result, bail};
 use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
+use tantivy::query::{BooleanQuery, BoostQuery, Occur, Query, TermQuery};
 use tantivy::schema::*;
 use tantivy::snippet::SnippetGenerator;
 use tantivy::{Index, IndexWriter, doc};
 
-use crate::analysis::{TOKENIZER, bilingual_analyzer, sanitize_query};
+use crate::analysis::{TOKENIZER, bilingual_analyzer, query_terms};
 
 /// Least heap Tantivy accepts for one index writer.
 const WRITER_BUDGET: usize = 15_000_000;
@@ -159,12 +159,14 @@ impl Corpus {
     /// Rank `query` over title, description, and body, returning at most `limit`
     /// hits in descending score.
     ///
-    /// The query is sanitized before parsing. A query left with no terms is an
-    /// error, since parsing an empty query would report "no matches" for what is
-    /// really a malformed request.
+    /// `query` is free text, never a query language: it is analyzed into terms and
+    /// looked up, so no character in it is reserved. A query holding no terms is an
+    /// error, since an empty query would report "no matches" for what is really a
+    /// malformed request.
     pub fn search(&self, query: &str, limit: usize, scoring: Scoring) -> Result<Vec<Hit>> {
-        let sanitized = sanitize_query(query);
-        if sanitized.trim().is_empty() {
+        let mut analyzer = self.index.tokenizer_for_field(self.fields.body)?;
+        let terms = query_terms(&mut analyzer, query);
+        if terms.is_empty() {
             bail!("query has no searchable terms: {:?}", query);
         }
         if limit == 0 {
@@ -172,13 +174,7 @@ impl Corpus {
         }
 
         let searcher = self.index.reader()?.searcher();
-        let mut parser = QueryParser::for_index(
-            &self.index,
-            vec![self.fields.title, self.fields.description, self.fields.body],
-        );
-        parser.set_field_boost(self.fields.title, scoring.title);
-        parser.set_field_boost(self.fields.description, scoring.description);
-        let parsed = parser.parse_query(&sanitized)?;
+        let parsed = self.union_over_fields(&terms, scoring);
 
         let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit).order_by_score())?;
         if top_docs.is_empty() {
@@ -211,10 +207,48 @@ impl Corpus {
         }
         Ok(hits)
     }
+
+    /// One `Should` clause per term per searched field, each weighted by its field.
+    ///
+    /// `Should` makes the clauses a union, which is what a bare list of words means
+    /// to a reader: every word contributes, none is required. A document matching
+    /// two of them outscores one matching a single word.
+    ///
+    /// The body carries no weight of its own because it anchors the scale the other
+    /// two are expressed against, as [`Scoring`] describes.
+    ///
+    /// Every term stands on its own, including the several a single written word can
+    /// yield: `importer's` contributes `importer` and `s` separately, and a document
+    /// holding either scores. Tantivy's query parser instead turned such a word into
+    /// an exact phrase requiring the two adjacent, which is why the same search wrote
+    /// two different scores depending on which apostrophe the user typed. Adjacency is
+    /// a phrase search, and this tool does not offer one.
+    fn union_over_fields(&self, terms: &[String], scoring: Scoring) -> Box<dyn Query> {
+        let weighted = [
+            (self.fields.title, scoring.title),
+            (self.fields.description, scoring.description),
+            (self.fields.body, 1.0),
+        ];
+        let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+        for (field, weight) in weighted {
+            for text in terms {
+                let term = Term::from_field_text(field, text);
+                // WithFreqs is what BM25 scores on; positions serve the snippet, not the term.
+                let leaf = TermQuery::new(term, IndexRecordOption::WithFreqs);
+                clauses.push((
+                    Occur::Should,
+                    Box::new(BoostQuery::new(Box::new(leaf), weight)),
+                ));
+            }
+        }
+        Box::new(BooleanQuery::new(clauses))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use tantivy::query::QueryParser;
+
     use super::*;
 
     fn docs() -> Vec<Doc> {
@@ -334,6 +368,33 @@ mod tests {
             .search("importer's work", 10, Scoring::default())
             .unwrap();
         assert_eq!(ids(&hits), ["importing"]);
+    }
+
+    #[test]
+    fn every_query_metacharacter_is_ordinary_text() {
+        let corpus = Corpus::build(&docs()).unwrap();
+        // Each spelling below is syntax to Tantivy's query grammar: a phrase quote,
+        // a field selector, negation, a required term, a boost, slop, a wildcard, a
+        // group. Here every one of them is a word with punctuation around it.
+        for query in [
+            "tomatoes'",
+            "tomatoes`",
+            "\"tomatoes\"",
+            "title:tomatoes",
+            "-tomatoes",
+            "+tomatoes",
+            "tomatoes^2",
+            "tomatoes~1",
+            "tomatoes*",
+            "(tomatoes)",
+            "[tomatoes]",
+            "{tomatoes}",
+            "tomatoes!",
+            "tomatoes\\",
+        ] {
+            let hits = corpus.search(query, 10, Scoring::default()).unwrap();
+            assert_eq!(ids(&hits), ["gardening"], "query: {:?}", query);
+        }
     }
 
     #[test]
