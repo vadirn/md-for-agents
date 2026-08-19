@@ -9,13 +9,10 @@ use crate::model::{Document, Node, flatten, is_numeric_address};
 /// reproduce the exact message the `resolve_address` wrapper prints.
 #[derive(Debug)]
 pub(crate) enum ResolveError {
-    /// `[0]`/`text` requested but the file has no text region.
     NoTextRegion(String),
-    /// Numeric address whose segment overflows `usize` or indexes past the tree.
     OutOfRange(String),
-    /// Slug matched no heading.
     NoSlugMatch(String),
-    /// Slug matched more than one heading; holds the candidate `(address, heading)` pairs.
+    /// Holds the candidate `(address, heading)` pairs.
     Ambiguous(String, Vec<(String, String)>),
 }
 
@@ -27,14 +24,13 @@ pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, 
     // `links`, so a heading slugging to `text` is reachable only by its number.
     // The predicate is `shadow`'s, so interception and announcement cannot
     // drift apart.
-    if crate::shadow::reserved_reading(address) == Some(crate::shadow::Reading::Text) {
+    if crate::shadow::reserved_reading(address) == Some(crate::shadow::Reserved::Text) {
         return doc
             .text
             .as_ref()
             .ok_or_else(|| ResolveError::NoTextRegion(address.to_string()));
     }
 
-    // Numeric dotted address: descend by 1-based index.
     if is_numeric_address(address) {
         let mut parts: Vec<usize> = Vec::new();
         for seg in address.split('.') {
@@ -60,7 +56,6 @@ pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, 
         return Ok(current.expect("numeric address yields a node"));
     }
 
-    // Slug: collect nodes whose `slug == needle`.
     let needle = crate::slug::segment(address);
     let mut all: Vec<&Node> = Vec::new();
     flatten(&doc.tree, &mut all);

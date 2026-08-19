@@ -20,10 +20,10 @@ pub(crate) enum FmAddress<'a> {
 ///
 /// Two spellings of one reading produce one variant, which is what makes the
 /// shadow question answerable without a table of names: a `## Frontmatter`
-/// heading and the address `fm` meet at [`Reading::Fm`]. Variant order is the
+/// heading and the address `fm` meet at [`Reserved::Fm`]. Variant order is the
 /// order the overview footer reports collisions in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Reading<'a> {
+pub(crate) enum Reserved<'a> {
     /// The lede above the first heading (`0`, `text`).
     Text,
     /// The frontmatter block, or one value inside it.
@@ -38,22 +38,22 @@ pub(crate) enum Reading<'a> {
 /// lowercasing preserves their byte length and the path can be sliced out of
 /// the original (case-preserving) address — YAML keys are case-sensitive, so
 /// the path must not be lowercased with the prefix.
-pub(crate) fn reserved_reading(addr: &str) -> Option<Reading<'_>> {
+pub(crate) fn reserved_reading(addr: &str) -> Option<Reserved<'_>> {
     if addr == "0" || addr.eq_ignore_ascii_case("text") {
-        return Some(Reading::Text);
+        return Some(Reserved::Text);
     }
     if addr.eq_ignore_ascii_case("links") {
-        return Some(Reading::Links);
+        return Some(Reserved::Links);
     }
     let lower = addr.to_lowercase();
     if lower == "frontmatter" || lower == "fm" {
-        return Some(Reading::Fm(FmAddress::Block));
+        return Some(Reserved::Fm(FmAddress::Block));
     }
     for prefix in ["frontmatter.", "fm."] {
         if lower.starts_with(prefix) {
             let path = &addr[prefix.len()..];
             if !path.is_empty() {
-                return Some(Reading::Fm(FmAddress::Path(path)));
+                return Some(Reserved::Fm(FmAddress::Path(path)));
             }
         }
     }
@@ -76,7 +76,7 @@ pub(crate) struct Shadow {
 /// The single shadowing tree walk. A slug carries no dots, so no heading can
 /// name an `fm.<path>` value address — asking [`reserved_reading`] of a slug
 /// yields [`FmAddress::Block`] or nothing.
-fn shadows<'d>(doc: &'d Document<'_>) -> Vec<(Reading<'d>, &'d Node)> {
+fn shadows<'d>(doc: &'d Document<'_>) -> Vec<(Reserved<'d>, &'d Node)> {
     let mut all: Vec<&Node> = Vec::new();
     flatten(&doc.tree, &mut all);
     all.into_iter()
@@ -95,7 +95,7 @@ impl Shadow {
 }
 
 /// Headings that shadow `reading`, in document order.
-pub(crate) fn shadowing_headings(doc: &Document, reading: Reading<'_>) -> Vec<Shadow> {
+pub(crate) fn shadowing_headings(doc: &Document, reading: Reserved<'_>) -> Vec<Shadow> {
     shadows(doc)
         .into_iter()
         .filter(|(r, _)| *r == reading)
@@ -132,7 +132,7 @@ pub(crate) fn phrase(doc: &Document, address: &str) -> Option<String> {
 /// to a reserved address. Empty when the document has no collision, which is the
 /// common case, so the overview grows nothing.
 ///
-/// Grouped by reading — the order [`Reading`] declares — and within a reading by
+/// Grouped by reading — the order [`Reserved`] declares — and within a reading by
 /// document order, so the footer reads as one line per reserved reading the tree
 /// collides with rather than an interleaving.
 pub(crate) fn overview_notes(doc: &Document) -> Vec<String> {

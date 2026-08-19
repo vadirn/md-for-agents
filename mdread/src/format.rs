@@ -1,5 +1,3 @@
-//! Output format for the reader: text (default) or JSON.
-
 use std::str::FromStr;
 
 /// Two-variant output format for the overview and unfold renderers.

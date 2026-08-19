@@ -1,87 +1,158 @@
-//! Overview rendering: the JSON shapes for the bare overview and the text
-//! tree-line helpers shared with the unfold walker.
+//! The rendering layer: turn a [`Reading`] into what a terminal shows.
+//!
+//! Every `println!` in this crate lives here. The library builds values; this
+//! module is the only place that decides how they look, which is what lets a
+//! caller take the same data and render it its own way.
 
-use serde::Serialize;
+use anyhow::Result;
 
+use crate::format::TextJson;
+use crate::frontmatter;
 use crate::model::{Node, range_lines, range_slice};
+use crate::reading::{Frontmatter, FrontmatterValue, Links, Overview, Reading, TreeNode, Unfold};
 use crate::tokens;
 
-#[derive(Serialize)]
-pub(crate) struct TextNodeJson {
-    pub(crate) address: String,
-    pub(crate) label: String,
-    pub(crate) line: usize,
-    pub(crate) lines: usize,
-    pub(crate) tokens: usize,
-}
-
-#[derive(Serialize)]
-pub(crate) struct NodeJson {
-    pub(crate) address: String,
-    pub(crate) heading: String,
-    pub(crate) level: usize,
-    pub(crate) line: usize,
-    pub(crate) lines: usize,
-    pub(crate) tokens: usize,
-    pub(crate) slug: String,
-    pub(crate) children: Vec<NodeJson>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct OverviewJson {
-    pub(crate) path: String,
-    pub(crate) fields: Vec<String>,
-    pub(crate) links: usize,
-    pub(crate) text: Option<TextNodeJson>,
-    pub(crate) tree: Vec<NodeJson>,
-}
-
-pub(crate) fn node_to_json(n: &Node, lines: &[&str]) -> NodeJson {
-    NodeJson {
-        address: n.address.clone(),
-        heading: n.heading.clone(),
-        level: n.level,
-        line: n.line,
-        lines: range_lines(n.start, n.end),
-        tokens: tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
-        slug: n.slug.clone(),
-        children: n.children.iter().map(|c| node_to_json(c, lines)).collect(),
+/// Print one reading in the requested format.
+pub fn print(reading: &Reading, format: TextJson) -> Result<()> {
+    match reading {
+        Reading::Overview(o) => print_one(o, format, print_overview),
+        Reading::Frontmatter(f) => print_one(f, format, print_frontmatter),
+        Reading::FrontmatterValue(v) => print_one(v, format, print_frontmatter_value),
+        Reading::Links(l) => print_one(l, format, print_links),
+        Reading::Unfold(u) => print_one(u, format, print_unfold),
     }
 }
 
-/// Format a single overview tree line (no trailing newline, no descendants).
-/// Shared by the overview renderer and the unfold folded-placeholder so a folded
-/// child reads identically to its overview line.
-pub(crate) fn tree_line_string(n: &Node, lines: &[&str]) -> String {
-    let marker = if n.children.is_empty() { ' ' } else { '+' };
-    // Indent the heading column by depth (number of `.` segments).
-    let depth = n.address.matches('.').count();
-    let indent = "  ".repeat(depth);
-    let lc = range_lines(n.start, n.end);
-    let toks = tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default());
+fn print_one<T: serde::Serialize>(value: &T, format: TextJson, text: fn(&T)) -> Result<()> {
+    if format == TextJson::Json {
+        println!("{}", serde_json::to_string_pretty(value)?);
+    } else {
+        text(value);
+    }
+    Ok(())
+}
+
+fn print_overview(o: &Overview) {
+    println!("{}", o.path);
+    if !o.fields.is_empty() {
+        println!("fields: {}", o.fields.join(", "));
+    }
+    println!("links: {}", o.links);
+    println!();
+
+    if let Some(t) = &o.text {
+        // Two leading spaces to align under the `+`/space marker column.
+        println!(
+            "  [0]  (text)        L{}   {} lines · ~{} tok",
+            t.line, t.lines, t.tokens
+        );
+    }
+
+    for n in &o.tree {
+        print_tree(n);
+    }
+
+    println!();
+    // Tool-agnostic: names addresses, not a command, so the `mdread` CLI and any
+    // wrapper around it print something true of themselves.
+    println!(
+        "next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links"
+    );
+    // Only when the document actually collides, so the common overview is
+    // unchanged. The line is a report about the tree above it, which is why it
+    // may join stdout where the unfold notes may not.
+    for line in &o.notes {
+        println!("{}", line);
+    }
+}
+
+fn print_tree(n: &TreeNode) {
+    println!(
+        "{}",
+        tree_line(
+            &n.address,
+            &n.heading,
+            n.line,
+            n.lines,
+            n.tokens,
+            !n.children.is_empty()
+        )
+    );
+    for c in &n.children {
+        print_tree(c);
+    }
+}
+
+fn print_frontmatter(f: &Frontmatter) {
+    println!(
+        "{}  (frontmatter)   L{}   {} lines",
+        f.address, f.line, f.lines
+    );
+    println!();
+    println!("{}", f.text);
+}
+
+fn print_frontmatter_value(v: &FrontmatterValue) {
+    println!("{}", frontmatter::value_to_text(&v.value));
+}
+
+fn print_links(l: &Links) {
+    println!("{}  (outgoing)   {} links", l.address, l.links.len());
+    println!();
+    for link in &l.links {
+        let display = match &link.alias {
+            Some(alias) => format!("{} -> {}", link.target, alias),
+            None => link.target.clone(),
+        };
+        println!("  L{:<5} {:<9}  {}", link.line, link.kind, display);
+    }
+}
+
+fn print_unfold(u: &Unfold) {
+    println!(
+        "{}  {}   L{}   {} lines · ~{} tok",
+        u.address, u.heading, u.line, u.lines, u.tokens
+    );
+    println!();
+    print!("{}", u.text);
+}
+
+/// One rule, so an overview line and a folded placeholder inside an unfold read
+/// identically.
+fn tree_line(
+    address: &str,
+    heading: &str,
+    line: usize,
+    lines: usize,
+    tokens: usize,
+    has_children: bool,
+) -> String {
+    let marker = if has_children { '+' } else { ' ' };
+    let indent = "  ".repeat(address.matches('.').count());
     format!(
         "{} {}{:<6} {:<14} L{}   {} lines · ~{} tok",
         marker,
         indent,
-        n.address,
-        truncate_heading(&n.heading),
-        n.line,
-        lc,
-        toks
+        address,
+        truncate_heading(heading),
+        line,
+        lines,
+        tokens
     )
 }
 
-/// Print one tree line and no descendants (folded placeholder in unfold output).
-fn print_tree_line_single(n: &Node, lines: &[&str]) {
-    println!("{}", tree_line_string(n, lines));
-}
-
-/// Recursively print one overview tree line and its descendants.
-pub(crate) fn print_tree_line(n: &Node, lines: &[&str]) {
-    print_tree_line_single(n, lines);
-    for c in &n.children {
-        print_tree_line(c, lines);
-    }
+/// Format a single overview tree line straight from the parsed node, for the
+/// unfold walker's folded placeholders. Sizes are computed here because the
+/// walker holds nodes rather than the rendered tree.
+pub(crate) fn tree_line_string(n: &Node, lines: &[&str]) -> String {
+    tree_line(
+        &n.address,
+        &n.heading,
+        n.line,
+        range_lines(n.start, n.end),
+        tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
+        !n.children.is_empty(),
+    )
 }
 
 /// Trim a heading for the tree column. Long headings are cut to keep the line
