@@ -322,6 +322,21 @@ mod tests {
     }
 
     #[test]
+    fn an_apostrophe_searches_the_words_around_it() {
+        let corpus = Corpus::build(&[Doc {
+            id: "importing".into(),
+            title: "Importing".into(),
+            description: String::new(),
+            body: "The importer's work runs nightly.".into(),
+        }])
+        .unwrap();
+        let hits = corpus
+            .search("importer's work", 10, Scoring::default())
+            .unwrap();
+        assert_eq!(ids(&hits), ["importing"]);
+    }
+
+    #[test]
     fn an_empty_corpus_answers_without_matching() {
         let corpus = Corpus::build(&[]).unwrap();
         assert!(
