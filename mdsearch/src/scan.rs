@@ -5,22 +5,24 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use ignore::WalkBuilder;
 
-/// Exclusion file read alongside `.gitignore` and `.ignore`, for rules that
-/// belong to the search rather than to the repository.
-pub const IGNORE_FILE: &str = ".mdsearchignore";
+use crate::corpus::Doc;
+use crate::frontmatter;
 
 /// Extensions the walk reads. A Markdown file under any other name stays unread.
-const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown"];
+pub const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown"];
 
 /// Which files the walk yields.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Walk {
-    /// Obey exclusion files. Each folder's `.gitignore`, `.ignore` and
-    /// `.mdsearchignore` govern it and everything under it, in a plain folder as
-    /// much as in a git repository.
+    /// Obey exclusion files. Each folder's `.gitignore` and `.ignore` govern it
+    /// and everything under it, in a plain folder as much as in a git repository.
     pub ignore_files: bool,
     /// Yield dot-files and dot-folders, which the walk skips by default.
     pub hidden: bool,
+    /// One more exclusion filename, read alongside `.gitignore` and `.ignore`,
+    /// for rules belonging to the caller rather than to the repository. The file
+    /// takes gitignore syntax, whatever it is named.
+    pub custom_ignore: Option<String>,
 }
 
 impl Default for Walk {
@@ -28,6 +30,7 @@ impl Default for Walk {
         Walk {
             ignore_files: true,
             hidden: false,
+            custom_ignore: None,
         }
     }
 }
@@ -40,6 +43,19 @@ pub struct MdFile {
     /// File name without its extension.
     pub name: String,
     pub content: String,
+}
+
+impl MdFile {
+    /// The document this file indexes as: its name titles it, its frontmatter
+    /// `description:` describes it, and the prose after that block is its body.
+    pub fn to_doc(&self) -> Doc {
+        Doc {
+            id: self.relative.clone(),
+            title: self.name.clone(),
+            description: frontmatter::description(&self.content),
+            body: frontmatter::body(&self.content).to_string(),
+        }
+    }
 }
 
 fn is_markdown(path: &Path) -> bool {
@@ -70,8 +86,8 @@ pub fn scan(root: &Path, walk: Walk) -> Result<Vec<MdFile>> {
         // Read `.gitignore` outside a repository too: the folder searched is not
         // always the folder git tracks.
         .require_git(false);
-    if walk.ignore_files {
-        builder.add_custom_ignore_filename(IGNORE_FILE);
+    if let (true, Some(name)) = (walk.ignore_files, walk.custom_ignore.as_deref()) {
+        builder.add_custom_ignore_filename(name);
     }
 
     let mut files = Vec::new();
@@ -163,12 +179,16 @@ mod tests {
     }
 
     #[test]
-    fn the_search_ignore_file_excludes_its_own_patterns() {
+    fn the_custom_ignore_file_excludes_its_own_patterns() {
         let tmp = TempDir::new().unwrap();
-        write(tmp.path(), IGNORE_FILE, "*.tmp.md\n");
+        write(tmp.path(), ".customignore", "*.tmp.md\n");
         write(tmp.path(), "keep.md", "a");
         write(tmp.path(), "draft.tmp.md", "b");
-        let files = scan(tmp.path(), Walk::default()).unwrap();
+        let walk = Walk {
+            custom_ignore: Some(".customignore".into()),
+            ..Walk::default()
+        };
+        let files = scan(tmp.path(), walk).unwrap();
         assert_eq!(names(&files), vec!["keep.md"]);
     }
 
@@ -180,7 +200,7 @@ mod tests {
         write(tmp.path(), "vendor/skip.md", "b");
         let walk = Walk {
             ignore_files: false,
-            hidden: false,
+            ..Walk::default()
         };
         let files = scan(tmp.path(), walk).unwrap();
         assert_eq!(names(&files), vec!["keep.md", "vendor/skip.md"]);
@@ -196,8 +216,8 @@ mod tests {
             vec!["keep.md"]
         );
         let walk = Walk {
-            ignore_files: true,
             hidden: true,
+            ..Walk::default()
         };
         assert_eq!(
             names(&scan(tmp.path(), walk).unwrap()),

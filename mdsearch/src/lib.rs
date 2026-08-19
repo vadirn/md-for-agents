@@ -1,24 +1,27 @@
-//! BM25 search over the Markdown files in a folder.
+//! BM25 search over Markdown, in two parts.
 //!
-//! One run walks the folder, indexes what the exclusion files admit, and ranks
-//! the files against the query. The index lives in RAM for that run alone, so a
-//! result always describes the files as they are now, and nothing needs
-//! reindexing after an edit.
+//! [`Corpus`] is the core: an in-RAM Tantivy index over [`Doc`] values a caller
+//! supplies, with the field weights in [`Scoring`] and the stemming chain in
+//! [`analysis`]. It knows nothing about files, so a caller with its own corpus,
+//! its own exclusion rules, or its own ranking reuses it whole — taking
+//! [`Corpus::index`] to query Tantivy directly when [`Corpus::search`] is not the
+//! retrieval it wants.
 //!
-//! A file enters the index as four fields: its name, its frontmatter
-//! `description:`, the prose after that block, and its relative path. A hit
-//! reports the path, the score, a matching window, and an estimated token count.
+//! [`scan`] and [`run`] are the Markdown half the `mdsearch` binary is built
+//! from: walk a folder, turn each file into a `Doc` by its name, its frontmatter
+//! `description:`, and the prose after that block, then print the hits. The
+//! binary holds the defaults; nothing here presumes them.
 
+pub mod analysis;
+mod corpus;
 mod format;
-mod frontmatter;
-mod index;
+pub mod frontmatter;
+mod render;
 mod scan;
-mod search;
 mod tokens;
 
+pub use corpus::{Corpus, Doc, Fields, Hit, Scoring, Snippet};
 pub use format::TextJson;
-pub use scan::{IGNORE_FILE, Walk};
-pub use search::{DESCRIPTION_BOOST, Hit, SearchOutput, TITLE_BOOST, run, search};
-
-/// Hits one run reports unless the caller asks for a different count.
-pub const DEFAULT_LIMIT: usize = 10;
+pub use render::{SearchOutput, SearchResult, run, search};
+pub use scan::{MARKDOWN_EXTENSIONS, MdFile, Walk, scan};
+pub use tokens::estimate_tokens;

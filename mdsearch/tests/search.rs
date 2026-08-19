@@ -3,8 +3,11 @@
 use std::fs;
 use std::path::Path;
 
-use mdsearch::{DEFAULT_LIMIT, IGNORE_FILE, TextJson, Walk};
+use mdsearch::{TextJson, Walk};
 use tempfile::TempDir;
+
+/// Result count these tests ask for; the binary has its own default.
+const DEFAULT_LIMIT: usize = 10;
 
 fn write(dir: &Path, rel: &str, content: &str) {
     let path = dir.join(rel);
@@ -29,7 +32,7 @@ fn corpus() -> TempDir {
     tmp
 }
 
-fn paths(hits: &[mdsearch::Hit]) -> Vec<&str> {
+fn paths(hits: &[mdsearch::SearchResult]) -> Vec<&str> {
     hits.iter().map(|h| h.path.as_str()).collect()
 }
 
@@ -150,10 +153,14 @@ fn an_excluded_folder_stays_out_of_the_results() {
 }
 
 #[test]
-fn the_search_ignore_file_excludes_what_git_keeps() {
+fn a_custom_ignore_file_excludes_what_git_keeps() {
     let tmp = corpus();
-    write(tmp.path(), IGNORE_FILE, "notes/Gardening.md\n");
-    let hits = mdsearch::search("tomatoes", tmp.path(), DEFAULT_LIMIT, Walk::default()).unwrap();
+    write(tmp.path(), ".customignore", "notes/Gardening.md\n");
+    let walk = Walk {
+        custom_ignore: Some(".customignore".into()),
+        ..Walk::default()
+    };
+    let hits = mdsearch::search("tomatoes", tmp.path(), DEFAULT_LIMIT, walk).unwrap();
     assert!(hits.is_empty(), "got: {:?}", paths(&hits));
 }
 
@@ -164,7 +171,7 @@ fn no_ignore_searches_the_excluded_files() {
     write(tmp.path(), "vendor/Copy.md", "BM25 term frequency again.\n");
     let walk = Walk {
         ignore_files: false,
-        hidden: false,
+        ..Walk::default()
     };
     let hits = mdsearch::search("term frequency", tmp.path(), DEFAULT_LIMIT, walk).unwrap();
     assert_eq!(hits.len(), 2, "got: {:?}", paths(&hits));
@@ -203,4 +210,62 @@ fn json_and_text_runs_both_succeed() {
         )
         .unwrap();
     }
+}
+
+/// What another crate reuses: its own walk, its own filter, its own weights, over
+/// the same core. Nothing here goes through the CLI half.
+#[test]
+fn the_core_indexes_documents_a_caller_supplies() {
+    use mdsearch::{Corpus, Doc, Scoring};
+
+    let tmp = corpus();
+    let files = mdsearch::scan(tmp.path(), Walk::default()).unwrap();
+
+    // A caller drops what its own rules exclude, before anything is indexed.
+    let docs: Vec<Doc> = files
+        .iter()
+        .filter(|f| f.relative.contains("Retrieval"))
+        .map(|f| f.to_doc())
+        .collect();
+    assert_eq!(docs.len(), 1);
+
+    let corpus = Corpus::build(&docs).unwrap();
+    let hits = corpus
+        .search(
+            "term frequency",
+            DEFAULT_LIMIT,
+            Scoring {
+                title: 2.0,
+                description: 0.5,
+            },
+        )
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, "notes/Retrieval.md");
+    assert!(!hits[0].snippet.highlights.is_empty());
+
+    // A caller with its own retrieval takes the index and queries it directly.
+    assert_eq!(
+        corpus.index().reader().unwrap().searcher().num_docs(),
+        1,
+        "the index is reachable without going through search()"
+    );
+}
+
+/// Documents need not come from disk at all.
+#[test]
+fn the_core_needs_no_files() {
+    use mdsearch::{Corpus, Doc, Scoring};
+
+    let docs = vec![Doc {
+        id: "row-42".into(),
+        title: "In memory".into(),
+        description: String::new(),
+        body: "A document assembled in memory, never written to disk.".into(),
+    }];
+    let hits = Corpus::build(&docs)
+        .unwrap()
+        .search("assembled", DEFAULT_LIMIT, Scoring::default())
+        .unwrap();
+    assert_eq!(hits[0].id, "row-42");
 }
