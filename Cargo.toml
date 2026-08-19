@@ -2,7 +2,7 @@
 # so two members cannot drift onto different versions of the same crate.
 [workspace]
 resolver = "3"
-members = ["mdstruct", "mdread", "mdformat", "mdsearch"]
+members = ["cli", "mdstruct", "mdread", "mdformat", "mdsearch"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ license = "MIT"
 repository = "https://github.com/vadirn/md-for-agents"
 
 [workspace.dependencies]
+cli = { path = "cli" }
 mdstruct = { path = "mdstruct" }
 
 anyhow = "1"

@@ -7,6 +7,7 @@ repository.workspace = true
 description = "Comrak's parser plus mdstruct's shared parse configuration, with a block-level passthrough printer whose spans are gated by a non-whitespace-byte partition oracle."
 
 [dependencies]
+cli.workspace = true
 mdstruct.workspace = true
 clap.workspace = true
 comrak.workspace = true

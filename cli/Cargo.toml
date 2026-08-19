@@ -1,0 +1,9 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line concerns the tools in this workspace share: the output-format flag, the token estimate, and a stdout guard that treats a closed pipe as a clean stop."
+
+[dependencies]

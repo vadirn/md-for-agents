@@ -1,6 +1,6 @@
 //! CLI over the `mdformat` crate.
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
@@ -258,7 +258,12 @@ fn run_format(args: &FormatArgs) -> u8 {
         let (declined, exempt) = report_exemptions(&path, result.declined(), result.exempt());
         declinations += declined;
         exemptions += exempt;
-        print!("{}", result.output);
+        // A whole formatted file, so it outruns the pipe buffer on any real
+        // input; `print!` would panic once a reader downstream exits.
+        if cli::with_stdout(|out| write!(out, "{}", result.output)).is_err() {
+            eprintln!("mdformat: {path}: cannot write to stdout");
+            return 3;
+        }
     }
 
     if args.check {

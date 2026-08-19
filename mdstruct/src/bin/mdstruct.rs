@@ -197,7 +197,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     if cli.schema_version {
-        println!("{SCHEMA_VERSION}");
+        let _ = writeln!(io::stdout().lock(), "{SCHEMA_VERSION}");
         return ExitCode::SUCCESS;
     }
 
@@ -301,7 +301,10 @@ fn run_check(args: &CheckArgs) -> u8 {
                         "span": { "start": d.span.start, "end": d.span.end },
                         "line": d.line,
                     });
-                    println!("{rec}");
+                    // Written like every other stdout path in this binary: a
+                    // locked handle whose error is dropped, so a reader that
+                    // exits mid-stream stops the run instead of panicking it.
+                    let _ = writeln!(io::stdout().lock(), "{rec}");
                 }
                 None => {
                     eprintln!("mdstruct: {path}: warn: {} {} L{}", d.kind, d.label, d.line);

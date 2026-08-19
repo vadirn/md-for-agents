@@ -12,7 +12,6 @@
 //! whichever binary sets them.
 
 mod facet;
-mod format;
 mod frontmatter;
 mod model;
 mod reading;
@@ -20,7 +19,6 @@ pub mod render;
 mod resolve;
 mod shadow;
 mod slug;
-mod tokens;
 mod unfold;
 mod wikilink;
 
@@ -28,8 +26,10 @@ use std::path::Path;
 
 use anyhow::Result;
 
+// Re-exported so a caller naming the output format does not also depend on the
+// crate it comes from.
+pub use cli::TextJson;
 pub use facet::{HeadingRule, LinkRule};
-pub use format::TextJson;
 pub use reading::{
     Frontmatter, FrontmatterField, FrontmatterValue, Link, Links, Overview, Reading, TextNode,
     TreeNode, Unfold, UnfoldChild,
@@ -215,9 +215,7 @@ fn read_overview(
         label: "(text)".to_string(),
         line: t.line,
         lines: range_lines(t.start, t.end),
-        tokens: tokens::estimate_tokens(
-            &range_slice(&doc.lines, t.start, t.end).unwrap_or_default(),
-        ),
+        tokens: cli::estimate_tokens(&range_slice(&doc.lines, t.start, t.end).unwrap_or_default()),
     });
     Overview {
         path: display_path.to_string(),
@@ -238,7 +236,7 @@ fn tree_node(n: &Node, lines: &[&str]) -> TreeNode {
         level: n.level,
         line: n.line,
         lines: range_lines(n.start, n.end),
-        tokens: tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
+        tokens: cli::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
         slug: n.slug.clone(),
         children: n.children.iter().map(|c| tree_node(c, lines)).collect(),
     }
@@ -280,24 +278,12 @@ fn read_section(
 
 #[cfg(test)]
 mod tests {
-    use crate::format::TextJson;
     use crate::model::*;
     use crate::render::tree_line_string;
     use crate::resolve::{ResolveError, resolve, resolve_address};
     use crate::unfold::*;
-    use std::str::FromStr;
 
     const SAMPLE: &str = "---\ntype: note\nslug: x\n---\n\nLede prose before any heading.\nSecond line of lede.\n\n# Direction\n\nDir body.\n\n## Sub one\n\nsub one body\n\n## Sub two\n\nsub two body\n\n# Glossary\n\ngloss body\n\n# Log & Notes\n\nfirst.\n\n# Log Notes\n\nsecond.\n";
-
-    #[test]
-    fn from_str_roundtrip() {
-        assert_eq!(TextJson::from_str("text").unwrap(), TextJson::Text);
-        assert_eq!(TextJson::from_str("json").unwrap(), TextJson::Json);
-        assert_eq!(TextJson::from_str("JSON").unwrap(), TextJson::Json);
-        assert!(TextJson::from_str("yaml").is_err());
-        assert_eq!(TextJson::Text.to_string(), "text");
-        assert_eq!(TextJson::Json.to_string(), "json");
-    }
 
     #[test]
     fn tree_shape_and_addresses() {
