@@ -4,39 +4,9 @@
 //! The text sink and the JSON `content` come from one walker, so they cannot
 //! diverge.
 
-use serde::Serialize;
-
 use crate::model::{Node, node_tokens, range_lines, range_slice};
+use crate::reading::UnfoldChild;
 use crate::render::tree_line_string;
-
-/// One child entry in an unfolded section's JSON output. `content` is present
-/// only when the child was inlined; `folded` is true when it was folded.
-#[derive(Serialize)]
-pub(crate) struct UnfoldChildJson {
-    pub(crate) address: String,
-    pub(crate) heading: String,
-    pub(crate) level: usize,
-    pub(crate) line: usize,
-    pub(crate) lines: usize,
-    pub(crate) tokens: usize,
-    pub(crate) folded: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) content: Option<String>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct UnfoldJson {
-    pub(crate) path: String,
-    pub(crate) address: String,
-    pub(crate) heading: String,
-    pub(crate) slug: String,
-    pub(crate) level: usize,
-    pub(crate) line: usize,
-    pub(crate) lines: usize,
-    pub(crate) tokens: usize,
-    pub(crate) content: String,
-    pub(crate) children: Vec<UnfoldChildJson>,
-}
 
 /// Decide whether a child at `level_depth` levels below the addressed node is
 /// inlined (recursed into) or folded to a placeholder.
@@ -118,17 +88,17 @@ fn write_unfold(
     Ok(())
 }
 
-/// Recursively build a child's unfold JSON. When inlined, `content` holds the
-/// child's own prose plus its (recursively unfolded) descendants and `folded` is
-/// false; when folded, `content` is omitted and `folded` is true.
-pub(crate) fn unfold_child_json(
+/// Recursively build a child's entry. When inlined, `content` holds the child's
+/// own prose plus its (recursively unfolded) descendants and `folded` is false;
+/// when folded, `content` is `None` and `folded` is true.
+pub(crate) fn unfold_child(
     n: &Node,
     lines: &[&str],
     level_depth: usize,
     depth: Option<usize>,
     threshold: usize,
     full: bool,
-) -> UnfoldChildJson {
+) -> UnfoldChild {
     let inline = should_inline(n, lines, level_depth, depth, threshold, full);
     let content = if inline {
         Some(unfold_content_string(
@@ -142,7 +112,7 @@ pub(crate) fn unfold_child_json(
     } else {
         None
     };
-    UnfoldChildJson {
+    UnfoldChild {
         address: n.address.clone(),
         heading: n.heading.clone(),
         level: n.level,

@@ -27,7 +27,7 @@ pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, 
     // `links`, so a heading slugging to `text` is reachable only by its number.
     // The predicate is `shadow`'s, so interception and announcement cannot
     // drift apart.
-    if crate::shadow::reserved_reading(address) == Some(crate::shadow::Reading::Text) {
+    if crate::shadow::reserved_reading(address) == Some(crate::shadow::Reserved::Text) {
         return doc
             .text
             .as_ref()

@@ -3,12 +3,20 @@
 //! Renders a file's heading tree folded to one line per section, or unfolds one
 //! addressed section. Structure comes from [`mdstruct`]; the fold thresholds,
 //! token estimate and address grammar are this crate's own.
+//!
+//! Reading and printing are separate concerns here. [`read_file`] and
+//! [`read_content`] resolve an address to a [`Reading`] and return it;
+//! [`render::print`] is the only thing that turns one into terminal output. A
+//! caller that wants the data takes the value and never goes through stdout,
+//! and the fold threshold arrives as a parameter, so the defaults belong to
+//! whichever binary sets them.
 
 mod facet;
 mod format;
 mod frontmatter;
 mod model;
-mod render;
+mod reading;
+pub mod render;
 mod resolve;
 mod shadow;
 mod slug;
@@ -22,15 +30,15 @@ use anyhow::Result;
 
 pub use facet::{HeadingRule, LinkRule};
 pub use format::TextJson;
+pub use reading::{
+    Frontmatter, FrontmatterField, FrontmatterValue, Link, Links, Overview, Reading, TextNode,
+    TreeNode, Unfold, UnfoldChild,
+};
 
-use model::{Document, node_tokens, parse_document_with, range_lines, range_slice};
-use render::{OverviewJson, TextNodeJson, node_to_json, print_tree_line};
+use model::{Document, Node, node_tokens, parse_document_with, range_lines, range_slice};
 use resolve::resolve_address;
-use shadow::{FmAddress, Reading, reserved_reading};
-use unfold::{UnfoldJson, own_prose, unfold_child_json, unfold_content_string};
-
-/// Default inline cutoff in estimated tokens for the unfold heuristic.
-pub const DEFAULT_THRESHOLD: usize = 2000;
+use shadow::{FmAddress, Reserved, reserved_reading};
+use unfold::{own_prose, unfold_child, unfold_content_string};
 
 /// The Markdown flavour a caller reads in: the two places where a defensible
 /// reading of the same bytes differs. [`Default`] is plain CommonMark; a caller
@@ -41,121 +49,88 @@ pub struct Dialect {
     pub links: LinkRule,
 }
 
-/// Read `file` and render it: a folded overview when `address` is `None`, or the
-/// smart-unfolded addressed section otherwise.
-pub fn run(
+/// Read `file`: a folded overview when `address` is `None`, or the smart-unfolded
+/// addressed section otherwise.
+pub fn read_file(
     file: &Path,
     address: Option<&str>,
     depth: Option<usize>,
     full: bool,
-    threshold: Option<usize>,
-    format: TextJson,
+    threshold: usize,
     dialect: Dialect,
-) -> Result<()> {
+) -> Result<Reading> {
     let content = std::fs::read_to_string(file)
         .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", file.display(), e))?;
-    run_content(
+    read_content(
         &file.display().to_string(),
         &content,
         address,
         depth,
         full,
         threshold,
-        format,
         dialect,
     )
 }
 
-/// Render already-loaded `content`, labelled `display_path` in the output. Lets a
+/// Read already-loaded `content`, labelled `display_path` in the result. Lets a
 /// caller read from stdin or an in-memory buffer.
-#[allow(clippy::too_many_arguments)]
-pub fn run_content(
+pub fn read_content(
     display_path: &str,
     content: &str,
     address: Option<&str>,
     depth: Option<usize>,
     full: bool,
-    threshold: Option<usize>,
-    format: TextJson,
+    threshold: usize,
     dialect: Dialect,
-) -> Result<()> {
+) -> Result<Reading> {
     let doc = parse_document_with(content, dialect.headings);
-    let threshold = threshold.unwrap_or(DEFAULT_THRESHOLD);
 
     let Some(addr) = address else {
-        return emit_overview(display_path, content, &doc, dialect.links, format);
+        return Ok(Reading::Overview(read_overview(
+            display_path,
+            content,
+            &doc,
+            dialect.links,
+        )));
     };
 
     // Reserved addresses are matched before the heading tree, since they name
     // parts of the file the tree cannot reach. A heading that slugs to one of
     // them stays reachable by its numeric address, and the collision is
     // announced rather than resolved.
+    //
+    // The announcement rides on the value only when the reading succeeds: a
+    // failed reading names the shadow in its own error instead.
     match reserved_reading(addr) {
-        Some(Reading::Fm(which)) => {
-            let out = emit_frontmatter(display_path, content, &doc, addr, which, format);
-            announce_shadow(&doc, addr, out)
+        Some(Reserved::Fm(which)) => read_frontmatter(display_path, content, &doc, addr, which),
+        Some(Reserved::Links) => {
+            let mut links = read_links(display_path, content, addr, dialect.links);
+            links.note = shadow::phrase(&doc, addr);
+            Ok(Reading::Links(links))
         }
-        Some(Reading::Links) => {
-            let out = emit_links(display_path, content, addr, dialect.links, format);
-            announce_shadow(&doc, addr, out)
+        Some(Reserved::Text) => {
+            let mut section = read_section(display_path, &doc, addr, depth, full, threshold)?;
+            section.note = shadow::phrase(&doc, addr);
+            Ok(Reading::Unfold(section))
         }
-        Some(Reading::Text) => {
-            let out = emit_section(display_path, &doc, addr, depth, full, threshold, format);
-            announce_shadow(&doc, addr, out)
-        }
-        None => emit_section(display_path, &doc, addr, depth, full, threshold, format),
+        None => Ok(Reading::Unfold(read_section(
+            display_path,
+            &doc,
+            addr,
+            depth,
+            full,
+            threshold,
+        )?)),
     }
 }
 
-/// Report on stderr that the reserved reading just served on stdout has a live
-/// shadow — a heading that slugs to the same address. Only on success: a failed
-/// reading says it in its own error instead.
-///
-/// stderr, never stdout: the unfold output is a payload a caller consumes, so it
-/// stays byte-identical in both text and JSON mode, and a note cannot corrupt it.
-fn announce_shadow(doc: &Document, address: &str, out: Result<()>) -> Result<()> {
-    if out.is_ok()
-        && let Some(p) = shadow::phrase(doc, address)
-    {
-        eprintln!("note: {}", p);
-    }
-    out
-}
-
-#[derive(serde::Serialize)]
-struct FieldJson {
-    key: String,
-    value: String,
-    line: usize,
-}
-
-#[derive(serde::Serialize)]
-struct FrontmatterJson {
-    path: String,
-    address: String,
-    line: usize,
-    lines: usize,
-    fields: Vec<FieldJson>,
-}
-
-#[derive(serde::Serialize)]
-struct FrontmatterValueJson {
-    path: String,
-    address: String,
-    /// The resolved value with its YAML type preserved, so a list arrives as a
-    /// JSON array and a number as a number.
-    value: serde_json::Value,
-}
-
-/// Frontmatter path: print the raw block, or one addressed value.
-fn emit_frontmatter(
+fn read_frontmatter(
     display_path: &str,
     content: &str,
     doc: &Document,
     address: &str,
     which: FmAddress<'_>,
-    format: TextJson,
-) -> Result<()> {
+) -> Result<Reading> {
     let Some(text) = frontmatter::block_text(content) else {
         // The address resolved to nothing, and a heading may be the thing the
         // caller meant. Name it and its numeric address rather than letting the
@@ -182,231 +157,125 @@ fn emit_frontmatter(
                     frontmatter::field_order(content).join(", ")
                 )
             })?;
-            if format == TextJson::Json {
-                let out = FrontmatterValueJson {
-                    path: display_path.to_string(),
-                    address: address.to_string(),
-                    value: serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
-                };
-                println!("{}", serde_json::to_string_pretty(&out)?);
-            } else {
-                println!("{}", frontmatter::value_to_text(value));
-            }
+            Ok(Reading::FrontmatterValue(FrontmatterValue {
+                path: display_path.to_string(),
+                address: address.to_string(),
+                value: value.clone(),
+            }))
         }
         FmAddress::Block => {
             let (start, end) = frontmatter::block_line_range(content).unwrap_or((1, 0));
-            if format == TextJson::Json {
-                let fields = frontmatter::fields_with_values(content)
-                    .into_iter()
-                    .map(|f| FieldJson {
-                        key: f.key,
-                        value: f.value,
-                        line: f.line,
-                    })
-                    .collect();
-                let out = FrontmatterJson {
-                    path: display_path.to_string(),
-                    address: address.to_string(),
-                    line: start,
-                    lines: range_lines(start, end),
-                    fields,
-                };
-                println!("{}", serde_json::to_string_pretty(&out)?);
-            } else {
-                println!(
-                    "{}  (frontmatter)   L{}   {} lines",
-                    address,
-                    start,
-                    range_lines(start, end)
-                );
-                println!();
-                println!("{}", text);
-            }
+            let fields = frontmatter::fields_with_values(content)
+                .into_iter()
+                .map(|f| FrontmatterField {
+                    key: f.key,
+                    value: f.value,
+                    line: f.line,
+                })
+                .collect();
+            Ok(Reading::Frontmatter(Frontmatter {
+                path: display_path.to_string(),
+                address: address.to_string(),
+                line: start,
+                lines: range_lines(start, end),
+                fields,
+                text,
+                note: shadow::phrase(doc, address),
+            }))
         }
     }
-    Ok(())
 }
 
-#[derive(serde::Serialize)]
-struct LinkJson {
-    kind: &'static str,
-    target: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    alias: Option<String>,
-    line: usize,
-}
-
-#[derive(serde::Serialize)]
-struct LinksJson {
-    path: String,
-    address: String,
-    links: Vec<LinkJson>,
-}
-
-/// `links` address: list the outgoing links the overview only counted.
-fn emit_links(
-    display_path: &str,
-    content: &str,
-    address: &str,
-    rule: LinkRule,
-    format: TextJson,
-) -> Result<()> {
-    let links = facet::links(content, rule);
-    if format == TextJson::Json {
-        let out = LinksJson {
-            path: display_path.to_string(),
-            address: address.to_string(),
-            links: links
-                .into_iter()
-                .map(|l| LinkJson {
-                    kind: l.kind,
-                    target: l.target,
-                    alias: l.alias,
-                    line: l.line,
-                })
-                .collect(),
-        };
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        return Ok(());
+/// `links` address: the outgoing links the overview only counted.
+fn read_links(display_path: &str, content: &str, address: &str, rule: LinkRule) -> Links {
+    Links {
+        path: display_path.to_string(),
+        address: address.to_string(),
+        links: facet::links(content, rule)
+            .into_iter()
+            .map(|l| Link {
+                kind: l.kind,
+                target: l.target,
+                alias: l.alias,
+                line: l.line,
+            })
+            .collect(),
+        note: None,
     }
-
-    println!("{}  (outgoing)   {} links", address, links.len());
-    println!();
-    for l in &links {
-        let display = match &l.alias {
-            Some(alias) => format!("{} -> {}", l.target, alias),
-            None => l.target.clone(),
-        };
-        println!("  L{:<5} {:<9}  {}", l.line, l.kind, display);
-    }
-    Ok(())
 }
 
-/// Overview path (no address).
-fn emit_overview(
+fn read_overview(
     display_path: &str,
     content: &str,
     doc: &Document,
     link_rule: LinkRule,
-    format: TextJson,
-) -> Result<()> {
-    // Scan the raw frontmatter block for top-level keys in source order, so the
-    // listing reflects the file rather than an alphabetization.
-    let fields: Vec<String> = frontmatter::field_order(content);
-    let link_count = facet::link_count(content, link_rule);
-
-    if format == TextJson::Json {
-        let text = doc.text.as_ref().map(|t| TextNodeJson {
-            address: "0".to_string(),
-            label: "(text)".to_string(),
-            line: t.line,
-            lines: range_lines(t.start, t.end),
-            tokens: tokens::estimate_tokens(
-                &range_slice(&doc.lines, t.start, t.end).unwrap_or_default(),
-            ),
-        });
-        let tree = doc
-            .tree
-            .iter()
-            .map(|n| node_to_json(n, &doc.lines))
-            .collect();
-        let out = OverviewJson {
-            path: display_path.to_string(),
-            fields,
-            links: link_count,
-            text,
-            tree,
-        };
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        return Ok(());
+) -> Overview {
+    let text = doc.text.as_ref().map(|t| TextNode {
+        address: "0".to_string(),
+        label: "(text)".to_string(),
+        line: t.line,
+        lines: range_lines(t.start, t.end),
+        tokens: tokens::estimate_tokens(
+            &range_slice(&doc.lines, t.start, t.end).unwrap_or_default(),
+        ),
+    });
+    Overview {
+        path: display_path.to_string(),
+        // Scan the raw frontmatter block for top-level keys in source order, so
+        // the listing reflects the file rather than an alphabetization.
+        fields: frontmatter::field_order(content),
+        links: facet::link_count(content, link_rule),
+        text,
+        tree: doc.tree.iter().map(|n| tree_node(n, &doc.lines)).collect(),
+        notes: shadow::overview_notes(doc),
     }
+}
 
-    // Text overview.
-    println!("{}", display_path);
-    if !fields.is_empty() {
-        println!("fields: {}", fields.join(", "));
+fn tree_node(n: &Node, lines: &[&str]) -> TreeNode {
+    TreeNode {
+        address: n.address.clone(),
+        heading: n.heading.clone(),
+        level: n.level,
+        line: n.line,
+        lines: range_lines(n.start, n.end),
+        tokens: tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
+        slug: n.slug.clone(),
+        children: n.children.iter().map(|c| tree_node(c, lines)).collect(),
     }
-    println!("links: {}", link_count);
-    println!();
-
-    if let Some(t) = &doc.text {
-        let lines = range_lines(t.start, t.end);
-        let toks =
-            tokens::estimate_tokens(&range_slice(&doc.lines, t.start, t.end).unwrap_or_default());
-        // Two leading spaces to align under the `+`/space marker column.
-        println!(
-            "  [0]  (text)        L{}   {} lines · ~{} tok",
-            t.line, lines, toks
-        );
-    }
-
-    for n in &doc.tree {
-        print_tree_line(n, &doc.lines);
-    }
-
-    println!();
-    // Tool-agnostic: names addresses, not a command, so the `mdread` CLI and any
-    // wrapper around it print something true of themselves.
-    println!(
-        "next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links"
-    );
-    // Only when the document actually collides, so the common overview is
-    // unchanged. The line is a report about the tree above it, which is why it
-    // may join stdout where the unfold notes may not.
-    for line in shadow::overview_notes(doc) {
-        println!("{}", line);
-    }
-    Ok(())
 }
 
 /// With-address path: smart-unfold the addressed node.
 ///
-/// Text: the node header, then its own prose, then for each direct child either
-/// the inlined (recursively unfolded) text or a folded placeholder line
-/// identical to the overview tree line.
-fn emit_section(
+/// `content` is the node's own prose and `children` carries each child inlined
+/// or folded; `text` is the whole section as one block. All three come from the
+/// same walker, so they cannot disagree.
+fn read_section(
     display_path: &str,
     doc: &Document,
     address: &str,
     depth: Option<usize>,
     full: bool,
     threshold: usize,
-    format: TextJson,
-) -> Result<()> {
+) -> Result<Unfold> {
     let n = resolve_address(doc, address)?;
-    let lines = range_lines(n.start, n.end);
-    let toks = node_tokens(n, &doc.lines);
-    if format == TextJson::Json {
-        let children = n
+    Ok(Unfold {
+        path: display_path.to_string(),
+        address: n.address.clone(),
+        heading: n.heading.clone(),
+        slug: n.slug.clone(),
+        level: n.level,
+        line: n.line,
+        lines: range_lines(n.start, n.end),
+        tokens: node_tokens(n, &doc.lines),
+        content: own_prose(n, &doc.lines),
+        children: n
             .children
             .iter()
-            .map(|c| unfold_child_json(c, &doc.lines, 1, depth, threshold, full))
-            .collect();
-        let out = UnfoldJson {
-            path: display_path.to_string(),
-            address: n.address.clone(),
-            heading: n.heading.clone(),
-            slug: n.slug.clone(),
-            level: n.level,
-            line: n.line,
-            lines,
-            tokens: toks,
-            content: own_prose(n, &doc.lines),
-            children,
-        };
-        println!("{}", serde_json::to_string_pretty(&out)?);
-    } else {
-        println!(
-            "{}  {}   L{}   {} lines · ~{} tok",
-            n.address, n.heading, n.line, lines, toks
-        );
-        println!();
-        print!(
-            "{}",
-            unfold_content_string(n, &doc.lines, 0, depth, threshold, full)
-        );
-    }
-    Ok(())
+            .map(|c| unfold_child(c, &doc.lines, 1, depth, threshold, full))
+            .collect(),
+        text: unfold_content_string(n, &doc.lines, 0, depth, threshold, full),
+        note: None,
+    })
 }
 
 #[cfg(test)]
@@ -694,37 +563,37 @@ mod tests {
 
     #[test]
     fn frontmatter_addresses_recognized_case_insensitively() {
-        use crate::{FmAddress, Reading, reserved_reading};
+        use crate::{FmAddress, Reserved, reserved_reading};
         for a in ["fm", "FM", "frontmatter", "Frontmatter"] {
             assert!(
-                matches!(reserved_reading(a), Some(Reading::Fm(FmAddress::Block))),
+                matches!(reserved_reading(a), Some(Reserved::Fm(FmAddress::Block))),
                 "{a} should name the whole block"
             );
         }
         for a in ["fm.tags", "FM.tags", "frontmatter.tags"] {
             match reserved_reading(a) {
-                Some(Reading::Fm(FmAddress::Path(p))) => assert_eq!(p, "tags"),
+                Some(Reserved::Fm(FmAddress::Path(p))) => assert_eq!(p, "tags"),
                 _ => panic!("{a} should name a value"),
             }
         }
         // The path keeps its own dots, brackets, and original case: YAML keys are
         // case-sensitive, so only the prefix may be lowercased.
         match reserved_reading("fm.References[0].Target") {
-            Some(Reading::Fm(FmAddress::Path(p))) => assert_eq!(p, "References[0].Target"),
+            Some(Reserved::Fm(FmAddress::Path(p))) => assert_eq!(p, "References[0].Target"),
             _ => panic!("deep path should survive intact"),
         }
     }
 
     #[test]
     fn the_other_reserved_spellings_name_their_own_readings() {
-        use crate::{Reading, reserved_reading};
+        use crate::{Reserved, reserved_reading};
         for a in ["0", "text", "TEXT"] {
-            assert_eq!(reserved_reading(a), Some(Reading::Text), "{a} is the lede");
+            assert_eq!(reserved_reading(a), Some(Reserved::Text), "{a} is the lede");
         }
         for a in ["links", "LINKS"] {
             assert_eq!(
                 reserved_reading(a),
-                Some(Reading::Links),
+                Some(Reserved::Links),
                 "{a} is the index"
             );
         }
@@ -770,17 +639,48 @@ mod tests {
     // there is no lede for `0`/`text` to name.
     const SHADOW_TEXT: &str = "# Direction\n\n## Text\n\nnot the lede.\n";
 
-    fn read(content: &str, address: Option<&str>) -> anyhow::Result<()> {
-        crate::run_content(
+    fn read(content: &str, address: Option<&str>) -> anyhow::Result<crate::Reading> {
+        crate::read_content(
             "x.md",
             content,
             address,
             None,
             false,
-            None,
-            TextJson::Text,
+            2000,
             crate::Dialect::default(),
         )
+    }
+
+    // The two readings a caller most wants as data. Printing nothing is the
+    // point: these assert on the returned value, so the seam that lets another
+    // crate call `mdread` stays open.
+
+    #[test]
+    fn the_overview_arrives_as_a_value() {
+        let crate::Reading::Overview(o) = read(SAMPLE, None).unwrap() else {
+            panic!("no address reads the overview")
+        };
+        assert_eq!(o.path, "x.md");
+        assert_eq!(o.fields, ["type", "slug"]);
+        assert!(o.text.is_some(), "the lede is a node of its own");
+        assert_eq!(o.tree.len(), 4);
+        assert_eq!(o.tree[0].address, "1");
+        assert_eq!(o.tree[0].children.len(), 2);
+    }
+
+    #[test]
+    fn an_unfolded_section_arrives_as_a_value() {
+        let crate::Reading::Unfold(u) = read(SAMPLE, Some("1")).unwrap() else {
+            panic!("a numeric address reads a section")
+        };
+        assert_eq!(u.address, "1");
+        assert_eq!(u.heading, "Direction");
+        assert_eq!(u.children.len(), 2);
+        // `content` stops at the first child; `text` carries the whole section,
+        // which is the difference between what JSON serves and what text prints.
+        assert!(u.content.contains("Dir body."));
+        assert!(!u.content.contains("sub one body"));
+        assert!(u.text.contains("sub one body"));
     }
 
     #[test]

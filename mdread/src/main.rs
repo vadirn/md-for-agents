@@ -1,5 +1,9 @@
 //! `mdread` CLI — fold a Markdown file to its heading tree, or unfold one
 //! addressed section.
+//!
+//! This binary is the preconfigured half: it holds the fold threshold the tool
+//! ships with, reads through the library, and prints what comes back. The
+//! library holds no default, so another caller sets its own.
 
 use std::io::Read as _;
 use std::path::PathBuf;
@@ -8,6 +12,10 @@ use anyhow::Result;
 use clap::Parser;
 
 use mdread::{Dialect, HeadingRule, LinkRule, TextJson};
+
+/// Inline cutoff in estimated tokens, applied unless `--threshold` says
+/// otherwise. A child above it folds to a placeholder line instead of inlining.
+const DEFAULT_THRESHOLD: usize = 2000;
 
 #[derive(Parser)]
 #[command(
@@ -73,28 +81,37 @@ fn run(cli: &Cli) -> Result<()> {
         },
     };
 
-    if cli.file.as_os_str() == "-" {
+    let threshold = cli.threshold.unwrap_or(DEFAULT_THRESHOLD);
+
+    let reading = if cli.file.as_os_str() == "-" {
         let mut content = String::new();
         std::io::stdin().read_to_string(&mut content)?;
-        return mdread::run_content(
+        mdread::read_content(
             "-",
             &content,
             cli.address.as_deref(),
             cli.depth,
             cli.full,
-            cli.threshold,
-            cli.format,
+            threshold,
             dialect,
-        );
-    }
+        )?
+    } else {
+        mdread::read_file(
+            &cli.file,
+            cli.address.as_deref(),
+            cli.depth,
+            cli.full,
+            threshold,
+            dialect,
+        )?
+    };
 
-    mdread::run(
-        &cli.file,
-        cli.address.as_deref(),
-        cli.depth,
-        cli.full,
-        cli.threshold,
-        cli.format,
-        dialect,
-    )
+    mdread::render::print(&reading, cli.format)?;
+
+    // After the payload and on stderr, never stdout: the payload stays
+    // byte-identical in both formats, so a note cannot corrupt it.
+    if let Some(note) = reading.note() {
+        eprintln!("note: {}", note);
+    }
+    Ok(())
 }
