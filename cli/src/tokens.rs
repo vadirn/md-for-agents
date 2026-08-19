@@ -1,5 +1,8 @@
-/// Rough token estimate: one token per four characters. A result reports it so a
-/// caller can price the read before opening the file.
+/// Rough token estimate: one token per four characters.
+///
+/// Presentation policy, deliberately kept out of the `mdstruct` structural core.
+/// A reader's fold thresholds are tuned against it, and a search result reports
+/// it so a caller can price the read before opening the file.
 pub fn estimate_tokens(text: &str) -> usize {
     text.chars().count() / 4
 }
@@ -16,10 +19,10 @@ mod tests {
     #[test]
     fn four_chars_per_token_floors() {
         // Integer division floors, so sub-token remainders are dropped.
-        assert_eq!(estimate_tokens("abc"), 0); // 3 / 4
-        assert_eq!(estimate_tokens("abcd"), 1); // 4 / 4
-        assert_eq!(estimate_tokens("abcdefg"), 1); // 7 / 4
-        assert_eq!(estimate_tokens("abcdefgh"), 2); // 8 / 4
+        assert_eq!(estimate_tokens("abc"), 0);
+        assert_eq!(estimate_tokens("abcd"), 1);
+        assert_eq!(estimate_tokens("abcdefg"), 1);
+        assert_eq!(estimate_tokens("abcdefgh"), 2);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-/// Two-variant output format for the overview and unfold renderers.
+/// Two-variant output format: what a human reads, or what a program parses.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TextJson {
     Text,
@@ -24,5 +24,20 @@ impl std::fmt::Display for TextJson {
             TextJson::Text => write!(f, "text"),
             TextJson::Json => write!(f, "json"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_str_roundtrip() {
+        assert_eq!(TextJson::from_str("text").unwrap(), TextJson::Text);
+        assert_eq!(TextJson::from_str("json").unwrap(), TextJson::Json);
+        assert_eq!(TextJson::from_str("JSON").unwrap(), TextJson::Json);
+        assert!(TextJson::from_str("yaml").is_err());
+        assert_eq!(TextJson::Text.to_string(), "text");
+        assert_eq!(TextJson::Json.to_string(), "json");
     }
 }

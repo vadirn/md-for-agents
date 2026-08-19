@@ -1,73 +1,85 @@
 //! The rendering layer: turn a [`Reading`] into what a terminal shows.
 //!
-//! Every `println!` in this crate lives here. The library builds values; this
-//! module is the only place that decides how they look, which is what lets a
-//! caller take the same data and render it its own way.
+//! All of this crate's output is written here, through [`cli::with_stdout`], so
+//! a reader that exits early stops the run rather than panicking it. The library
+//! builds values; this module is the only place that decides how they look,
+//! which is what lets a caller take the same data and render it its own way.
+
+use std::io::{self, Write};
 
 use anyhow::Result;
+use cli::{TextJson, with_stdout};
 
-use crate::format::TextJson;
 use crate::frontmatter;
 use crate::model::{Node, range_lines, range_slice};
 use crate::reading::{Frontmatter, FrontmatterValue, Links, Overview, Reading, TreeNode, Unfold};
-use crate::tokens;
 
 /// Print one reading in the requested format.
 pub fn print(reading: &Reading, format: TextJson) -> Result<()> {
-    match reading {
-        Reading::Overview(o) => print_one(o, format, print_overview),
-        Reading::Frontmatter(f) => print_one(f, format, print_frontmatter),
-        Reading::FrontmatterValue(v) => print_one(v, format, print_frontmatter_value),
-        Reading::Links(l) => print_one(l, format, print_links),
-        Reading::Unfold(u) => print_one(u, format, print_unfold),
-    }
-}
-
-fn print_one<T: serde::Serialize>(value: &T, format: TextJson, text: fn(&T)) -> Result<()> {
+    // Serialized before the writer opens, so a serde failure stays separate from
+    // what the pipe did.
     if format == TextJson::Json {
-        println!("{}", serde_json::to_string_pretty(value)?);
-    } else {
-        text(value);
+        let json = match reading {
+            Reading::Overview(o) => serde_json::to_string_pretty(o)?,
+            Reading::Frontmatter(f) => serde_json::to_string_pretty(f)?,
+            Reading::FrontmatterValue(v) => serde_json::to_string_pretty(v)?,
+            Reading::Links(l) => serde_json::to_string_pretty(l)?,
+            Reading::Unfold(u) => serde_json::to_string_pretty(u)?,
+        };
+        with_stdout(|out| writeln!(out, "{}", json))?;
+        return Ok(());
     }
+
+    with_stdout(|out| match reading {
+        Reading::Overview(o) => write_overview(out, o),
+        Reading::Frontmatter(f) => write_frontmatter(out, f),
+        Reading::FrontmatterValue(v) => write_frontmatter_value(out, v),
+        Reading::Links(l) => write_links(out, l),
+        Reading::Unfold(u) => write_unfold(out, u),
+    })?;
     Ok(())
 }
 
-fn print_overview(o: &Overview) {
-    println!("{}", o.path);
+fn write_overview(out: &mut io::StdoutLock<'_>, o: &Overview) -> io::Result<()> {
+    writeln!(out, "{}", o.path)?;
     if !o.fields.is_empty() {
-        println!("fields: {}", o.fields.join(", "));
+        writeln!(out, "fields: {}", o.fields.join(", "))?;
     }
-    println!("links: {}", o.links);
-    println!();
+    writeln!(out, "links: {}", o.links)?;
+    writeln!(out)?;
 
     if let Some(t) = &o.text {
         // Two leading spaces to align under the `+`/space marker column.
-        println!(
+        writeln!(
+            out,
             "  [0]  (text)        L{}   {} lines · ~{} tok",
             t.line, t.lines, t.tokens
-        );
+        )?;
     }
 
     for n in &o.tree {
-        print_tree(n);
+        write_tree(out, n)?;
     }
 
-    println!();
+    writeln!(out)?;
     // Tool-agnostic: names addresses, not a command, so the `mdread` CLI and any
     // wrapper around it print something true of themselves.
-    println!(
+    writeln!(
+        out,
         "next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links"
-    );
+    )?;
     // Only when the document actually collides, so the common overview is
     // unchanged. The line is a report about the tree above it, which is why it
     // may join stdout where the unfold notes may not.
     for line in &o.notes {
-        println!("{}", line);
+        writeln!(out, "{}", line)?;
     }
+    Ok(())
 }
 
-fn print_tree(n: &TreeNode) {
-    println!(
+fn write_tree(out: &mut io::StdoutLock<'_>, n: &TreeNode) -> io::Result<()> {
+    writeln!(
+        out,
         "{}",
         tree_line(
             &n.address,
@@ -77,44 +89,48 @@ fn print_tree(n: &TreeNode) {
             n.tokens,
             !n.children.is_empty()
         )
-    );
+    )?;
     for c in &n.children {
-        print_tree(c);
+        write_tree(out, c)?;
     }
+    Ok(())
 }
 
-fn print_frontmatter(f: &Frontmatter) {
-    println!(
+fn write_frontmatter(out: &mut io::StdoutLock<'_>, f: &Frontmatter) -> io::Result<()> {
+    writeln!(
+        out,
         "{}  (frontmatter)   L{}   {} lines",
         f.address, f.line, f.lines
-    );
-    println!();
-    println!("{}", f.text);
+    )?;
+    writeln!(out)?;
+    writeln!(out, "{}", f.text)
 }
 
-fn print_frontmatter_value(v: &FrontmatterValue) {
-    println!("{}", frontmatter::value_to_text(&v.value));
+fn write_frontmatter_value(out: &mut io::StdoutLock<'_>, v: &FrontmatterValue) -> io::Result<()> {
+    writeln!(out, "{}", frontmatter::value_to_text(&v.value))
 }
 
-fn print_links(l: &Links) {
-    println!("{}  (outgoing)   {} links", l.address, l.links.len());
-    println!();
+fn write_links(out: &mut io::StdoutLock<'_>, l: &Links) -> io::Result<()> {
+    writeln!(out, "{}  (outgoing)   {} links", l.address, l.links.len())?;
+    writeln!(out)?;
     for link in &l.links {
         let display = match &link.alias {
             Some(alias) => format!("{} -> {}", link.target, alias),
             None => link.target.clone(),
         };
-        println!("  L{:<5} {:<9}  {}", link.line, link.kind, display);
+        writeln!(out, "  L{:<5} {:<9}  {}", link.line, link.kind, display)?;
     }
+    Ok(())
 }
 
-fn print_unfold(u: &Unfold) {
-    println!(
+fn write_unfold(out: &mut io::StdoutLock<'_>, u: &Unfold) -> io::Result<()> {
+    writeln!(
+        out,
         "{}  {}   L{}   {} lines · ~{} tok",
         u.address, u.heading, u.line, u.lines, u.tokens
-    );
-    println!();
-    print!("{}", u.text);
+    )?;
+    writeln!(out)?;
+    write!(out, "{}", u.text)
 }
 
 /// One rule, so an overview line and a folded placeholder inside an unfold read
@@ -150,7 +166,7 @@ pub(crate) fn tree_line_string(n: &Node, lines: &[&str]) -> String {
         &n.heading,
         n.line,
         range_lines(n.start, n.end),
-        tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
+        cli::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default()),
         !n.children.is_empty(),
     )
 }

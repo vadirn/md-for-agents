@@ -11,6 +11,7 @@ name = "mdread"
 path = "src/main.rs"
 
 [dependencies]
+cli.workspace = true
 mdstruct.workspace = true
 anyhow.workspace = true
 clap.workspace = true

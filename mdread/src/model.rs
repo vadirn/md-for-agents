@@ -5,7 +5,6 @@
 //! `"text"`, level 0), so every consumer treats it like any other node.
 
 use crate::facet::HeadingRule;
-use crate::tokens;
 
 /// A heading node in the document tree.
 #[derive(Debug, Clone)]
@@ -53,7 +52,7 @@ pub(crate) fn range_slice(lines: &[&str], start: usize, end: usize) -> Option<St
 
 /// Estimated tokens covered by a node's full range (heading through descendants).
 pub(crate) fn node_tokens(n: &Node, lines: &[&str]) -> usize {
-    tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default())
+    cli::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default())
 }
 
 /// Parse with the general CommonMark heading rule (used by tests).

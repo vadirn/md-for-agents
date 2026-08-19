@@ -11,6 +11,7 @@ name = "mdsearch"
 path = "src/main.rs"
 
 [dependencies]
+cli.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

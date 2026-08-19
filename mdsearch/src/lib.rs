@@ -14,14 +14,13 @@
 
 pub mod analysis;
 mod corpus;
-mod format;
 pub mod frontmatter;
 mod render;
 mod scan;
-mod tokens;
 
+// Re-exported so a caller reads a `SearchResult` without also depending on the
+// crate these come from.
+pub use cli::{TextJson, estimate_tokens};
 pub use corpus::{Corpus, Doc, Fields, Hit, Scoring, Snippet};
-pub use format::TextJson;
 pub use render::{SearchOutput, SearchResult, run, search};
 pub use scan::{MARKDOWN_EXTENSIONS, MdFile, Walk, scan};
-pub use tokens::estimate_tokens;

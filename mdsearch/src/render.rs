@@ -5,17 +5,17 @@
 //! [`crate::Corpus`] directly.
 
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::Write;
 use std::ops::Range;
 use std::path::Path;
 
 use anyhow::Result;
 use serde::Serialize;
 
+use cli::{TextJson, estimate_tokens, with_stdout};
+
 use crate::corpus::{Corpus, Hit, Scoring};
-use crate::format::TextJson;
 use crate::scan::{self, Walk};
-use crate::tokens::estimate_tokens;
 
 /// One result as the CLI reports it.
 #[derive(Debug, Serialize)]
@@ -69,22 +69,6 @@ fn mark(text: &str, highlights: &[Range<usize>]) -> String {
     out
 }
 
-/// Run `render` against a locked stdout, treating a closed pipe as a clean stop.
-///
-/// `println!` panics once a downstream reader exits, which `mdsearch … | head`
-/// does by design.
-fn with_stdout<F>(render: F) -> Result<()>
-where
-    F: FnOnce(&mut io::StdoutLock) -> io::Result<()>,
-{
-    let mut out = io::stdout().lock();
-    match render(&mut out) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-        Err(e) => Err(e.into()),
-    }
-}
-
 /// Walk `root`, index what the walk admits, and rank `query` against it.
 ///
 /// Returns the hits and the token estimate of each hit's body, which the core
@@ -133,7 +117,8 @@ pub fn run(query: &str, root: &Path, limit: usize, format: TextJson, walk: Walk)
             count: results.len(),
             results,
         };
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        let json = serde_json::to_string_pretty(&output)?;
+        with_stdout(|out| writeln!(out, "{}", json))?;
         return Ok(());
     }
 
@@ -148,7 +133,8 @@ pub fn run(query: &str, root: &Path, limit: usize, format: TextJson, walk: Walk)
             writeln!(out)?;
         }
         Ok(())
-    })
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]
