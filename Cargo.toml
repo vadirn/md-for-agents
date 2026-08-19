@@ -2,7 +2,7 @@
 # so two members cannot drift onto different versions of the same crate.
 [workspace]
 resolver = "3"
-members = ["mdstruct", "mdread", "mdformat"]
+members = ["mdstruct", "mdread", "mdformat", "mdsearch"]
 
 [workspace.package]
 version = "0.1.0"
