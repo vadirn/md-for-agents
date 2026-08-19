@@ -1,5 +1,5 @@
 //! Text analysis shared by every index built on this core: the stemming chain
-//! and the query sanitizer.
+//! and the query tokenizer.
 //!
 //! A caller running its own query against [`crate::Corpus`] uses these to match
 //! how the documents were indexed. Analyzing a query differently from the corpus
@@ -12,29 +12,25 @@ use tantivy::tokenizer::{
 /// Name the analysis chain registers under, and the one every field declares.
 pub const TOKENIZER: &str = "default";
 
-/// Replace Tantivy query-syntax metacharacters with spaces, so a query written as
-/// a phrase searches for its words.
+/// Split `text` into the terms an index built on `analyzer` actually holds.
 ///
-/// `plan the workflow: first pass` would otherwise read `workflow` as a field name
-/// and match nothing. `the importer's work` would fail to parse outright, because
-/// Tantivy opens a phrase on `'` and on `` ` `` just as it does on `"`.
+/// This is how a query reaches the index without passing through Tantivy's query
+/// grammar. The grammar reserves a set of metacharacters — quotation marks, an
+/// apostrophe, a backtick, `+`, `-`, `:`, `^`, `~`, brackets, braces — so text a
+/// person would type as an ordinary phrase can fail to parse, and guarding it
+/// means mirroring a character set the grammar keeps private. Here no character
+/// is reserved, because nothing parses the text: it is tokenized and looked up.
 ///
-/// The set mirrors `SPECIAL_CHARS` in `tantivy-query-grammar`, which is private, so
-/// a Tantivy upgrade can widen the grammar without widening this list.
-///
-/// Each metacharacter becomes a space rather than nothing. The indexing tokenizer
-/// breaks on every non-alphanumeric character, so a body storing `importer's` holds
-/// the two tokens `importer` and `s`. A space reproduces that pair, and a deletion
-/// would ask the index for `importers`, which it never held.
-pub fn sanitize_query(query: &str) -> String {
-    query
-        .chars()
-        .map(|c| match c {
-            ':' | '+' | '-' | '(' | ')' | '^' | '~' | '"' | '\'' | '`' | '*' | '?' | '[' | ']'
-            | '{' | '}' | '\\' | '!' => ' ',
-            other => other,
-        })
-        .collect()
+/// Pass the analyzer the field itself declares, from
+/// [`tantivy::Index::tokenizer_for_field`]. Building a fresh chain risks drifting
+/// from the one the documents were indexed with, which is the skew this module's
+/// header warns about.
+pub fn query_terms(analyzer: &mut TextAnalyzer, text: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    analyzer
+        .token_stream(text)
+        .process(&mut |token| terms.push(token.text.clone()));
+    terms
 }
 
 /// Build the analysis chain: tokenize, drop tokens over 40 bytes, lowercase, then
@@ -56,22 +52,34 @@ pub fn bilingual_analyzer() -> TextAnalyzer {
 mod tests {
     use super::*;
 
-    #[test]
-    fn sanitize_query_replaces_metacharacters() {
-        assert_eq!(
-            sanitize_query("structure the workflow: plan first"),
-            "structure the workflow  plan first"
-        );
-        assert_eq!(sanitize_query("retry - backoff"), "retry   backoff");
-        assert_eq!(sanitize_query("title:value"), "title value");
-        assert_eq!(sanitize_query("no specials here"), "no specials here");
+    fn terms(text: &str) -> Vec<String> {
+        query_terms(&mut bilingual_analyzer(), text)
     }
 
     #[test]
-    fn sanitize_query_spaces_the_phrase_quotes() {
-        // Tantivy opens a phrase on all three, so an odd count fails to parse.
-        assert_eq!(sanitize_query("importer's work"), "importer s work");
-        assert_eq!(sanitize_query("back`tick"), "back tick");
-        assert_eq!(sanitize_query("say \"hello\""), "say  hello ");
+    fn punctuation_separates_terms_instead_of_carrying_meaning() {
+        // Each of these is a Tantivy query metacharacter, and none is reserved here.
+        // "importer" stems to "import", the same form the indexed body holds.
+        assert_eq!(terms("importer's work"), ["import", "s", "work"]);
+        assert_eq!(terms("back`tick"), ["back", "tick"]);
+        assert_eq!(terms("say \"hello\""), ["say", "hello"]);
+        assert_eq!(terms("title:value"), ["titl", "valu"]);
+        assert_eq!(terms("retry - backoff"), ["retri", "backoff"]);
+        assert_eq!(
+            terms("plan the workflow: first pass"),
+            ["plan", "the", "workflow", "first", "pass"]
+        );
+    }
+
+    #[test]
+    fn a_query_of_only_punctuation_yields_no_terms() {
+        assert!(terms("***").is_empty());
+        assert!(terms("   ").is_empty());
+    }
+
+    #[test]
+    fn a_term_is_stemmed_the_way_the_corpus_is() {
+        assert_eq!(terms("running"), terms("runs"));
+        assert_eq!(terms("документы"), terms("документа"));
     }
 }
