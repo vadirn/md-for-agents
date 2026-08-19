@@ -71,8 +71,6 @@ pub(crate) fn parse_document_with(content: &str, rule: HeadingRule) -> Document<
     let lines: Vec<&str> = crate::facet::lines(content);
     let total = lines.len();
 
-    // 1-based line at which the body begins (the line after the closing
-    // frontmatter `---`, or line 1 when there is no frontmatter).
     let body_start = crate::frontmatter::body_start_line(content);
 
     let raw: Vec<crate::facet::BodyHeading> = crate::facet::body_headings(content, rule)
@@ -126,7 +124,6 @@ pub(crate) fn parse_document_with(content: &str, rule: HeadingRule) -> Document<
         })
         .collect();
 
-    // Content end for heading i = (line of next heading with level <= flats[i].level) - 1, else total.
     let ends: Vec<usize> = (0..flats.len())
         .map(|i| {
             let mut end = total;

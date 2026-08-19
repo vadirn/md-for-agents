@@ -23,8 +23,6 @@ pub fn strip(text: &str) -> String {
         .to_string()
 }
 
-/// Resolve a wikilink target to a note name: drop any `#anchor`, take the last
-/// `/`-separated segment, strip a trailing `.md`.
 pub fn resolve_name(target: &str) -> &str {
     let without_anchor = target.split('#').next().unwrap_or(target);
     let last_segment = without_anchor.rsplit('/').next().unwrap_or(without_anchor);

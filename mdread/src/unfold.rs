@@ -40,10 +40,7 @@ pub(crate) fn own_prose(n: &Node, lines: &[&str]) -> String {
     range_slice(lines, n.start, own_end).unwrap_or_default()
 }
 
-/// The single unfold walker. Writes a node's own prose, then for each child
-/// either the recursively-unfolded text (inline) or a folded placeholder line
-/// identical to the overview tree line. Both the text sink and the JSON
-/// `content` string come from here, so they cannot diverge.
+/// The single unfold walker.
 ///
 /// `level_depth` counts levels below the addressed node (0 at the addressed node
 /// itself). Each emitted segment is newline-terminated.
@@ -61,7 +58,6 @@ pub(crate) fn unfold_content_string(
     out
 }
 
-/// Recursive core of the unfold walker, writing into any `fmt::Write` sink.
 fn write_unfold(
     n: &Node,
     lines: &[&str],

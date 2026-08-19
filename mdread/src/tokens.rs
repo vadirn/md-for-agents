@@ -17,10 +17,10 @@ mod tests {
     #[test]
     fn four_chars_per_token_floors() {
         // Integer division floors, so sub-token remainders are dropped.
-        assert_eq!(estimate_tokens("abc"), 0); // 3 / 4
-        assert_eq!(estimate_tokens("abcd"), 1); // 4 / 4
-        assert_eq!(estimate_tokens("abcdefg"), 1); // 7 / 4
-        assert_eq!(estimate_tokens("abcdefgh"), 2); // 8 / 4
+        assert_eq!(estimate_tokens("abc"), 0);
+        assert_eq!(estimate_tokens("abcd"), 1);
+        assert_eq!(estimate_tokens("abcdefg"), 1);
+        assert_eq!(estimate_tokens("abcdefgh"), 2);
     }
 
     #[test]
