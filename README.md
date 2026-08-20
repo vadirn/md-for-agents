@@ -1,19 +1,10 @@
 # md-for-agents
 
-Four command-line tools give an agent a structural grip on Markdown.
+Command-line tools that give an agent a structural grip on Markdown.
 
-An agent reading Markdown usually picks one of two bad options. It reads the whole file and spends context on parts it does not need. Or it hand-rolls a scanner, so every tool's scanner disagrees about what the syntax means.
+An agent that reads a whole Markdown file spends context on parts it does not need. These tools let it read the shape first, then unfold only what the task needs.
 
-This workspace replaces both with one parse shared by:
-
-- the reader
-- the formatter
-- the search index
-
-Two rules hold across every tool:
-
-- Spans are byte offsets into the file you passed in. No tool restringifies your source. So a consumer slices its own bytes and recovers the original exactly.
-- stdout carries data and stderr carries diagnostics. A pipe into `jq` stays clean.
+Every tool writes data to stdout and diagnostics to stderr, so a pipe into `jq` stays clean.
 
 ## The tools
 
@@ -24,8 +15,6 @@ Two rules hold across every tool:
 | `mdformat` | Prints CommonMark from that same parse, scoped to whitespace and tables. |
 | `mdsearch` | Ranks a folder's Markdown by BM25, over an index built in RAM for one run. |
 
-`mdstruct` is the core. The other three consume it.
-
 ## Quick start
 
 The workspace is edition 2024, so it needs Rust 1.85 or newer. Clone it and build:
@@ -34,7 +23,7 @@ The workspace is edition 2024, so it needs Rust 1.85 or newer. Clone it and buil
 cargo build --release
 ```
 
-The four binaries land in `target/release/`. Fold this file to its shape:
+The binaries land in `target/release/`. Fold this file to its shape:
 
 ```bash
 ./target/release/mdread README.md
@@ -46,11 +35,9 @@ Then unfold one section by name:
 ./target/release/mdread README.md quick-start
 ```
 
-Nothing is indexed and nothing is cached, so there is no setup step between those two commands.
-
 ## mdread
 
-`mdread` reads a file in two passes. The first shows the heading tree, one line per section, with a line count and an estimated token count. The second unfolds the one section you name.
+`mdread` folds, then unfolds. The fold shows the heading tree, one line per section, with a line count and an estimated token count. The unfold prints the one section you name.
 
 An address is any of these:
 
@@ -70,7 +57,7 @@ mdread notes.md --format json # the same shape, machine-readable
 
 ## mdstruct
 
-`mdstruct` parses to NDJSON on stdout. Every span in that model is a pair of byte offsets into the original input. So a consumer reconstructs any slice by indexing its own bytes.
+`mdstruct` parses to NDJSON on stdout. Every span in that model is a pair of byte offsets into the original input. `mdstruct` never restringifies your source, so a consumer slices its own bytes and recovers the original exactly.
 
 ```bash
 mdstruct doc.md                # parse to NDJSON
@@ -80,16 +67,16 @@ mdstruct stats doc.md          # type-coverage report
 mdstruct --schema-version      # the schema contract version
 ```
 
-`check` is the freeze gate over that model. It verifies byte-exact tiling and the inline grammar. The summary goes to stderr, and any failure exits 4.
+Run `check` after changing the parser or bumping comrak. Point it at a corpus. It re-verifies that spans still tile each input byte-exactly, and that the inline grammar still holds. A failing input exits 4, and the summary goes to stderr. So it drops into CI as a gate.
 
 ## mdformat
 
-`mdformat` rewrites four things and leaves prose alone:
+`mdformat` rewrites layout:
 
-- It rewrites line endings.
-- It rewrites blank-line gaps.
-- It rewrites table padding.
-- It rewrites list markers.
+- line endings
+- blank-line gaps
+- table padding
+- list markers
 
 It never reflows a paragraph.
 
@@ -112,7 +99,7 @@ Splicing over one block's range then neither drops nor duplicates the rest of th
 
 ## mdsearch
 
-`mdsearch` ranks the Markdown files in a folder against a query, best match first. Scoring is BM25 over three fields:
+`mdsearch` ranks the Markdown files in a folder against a query, best match first. Scoring is BM25 over these fields:
 
 - the file name
 - the frontmatter `description:`
@@ -124,7 +111,7 @@ mdsearch "importer's work" ./docs --limit 3
 mdsearch "план миграции" ./docs --format json
 ```
 
-Three properties are worth knowing before you use it:
+Worth knowing before you use it:
 
 - Terms are stemmed in English and Russian, so a query matches words sharing a root with it.
 - Query punctuation reads as whitespace. A phrase searches for its words, and no character is query syntax.
@@ -142,7 +129,7 @@ mdformat/   block-level passthrough printer
 mdsearch/   BM25 search over a folder
 ```
 
-`cli` is a library with no binary. The other four crates each ship one.
+`cli` is a library with no binary. Every other crate ships one.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 
