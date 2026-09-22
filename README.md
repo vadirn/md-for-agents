@@ -159,6 +159,12 @@ cargo clippy --workspace --all-targets
 
 Both must pass before a change lands.
 
+## Linux arm64 releases
+
+The `musl tools` workflow checks every main-branch push, pull request, and manual run. It builds `mdstruct` and `mdread` with Rust 1.91.1 on a native arm64 Linux runner, tests the musl build, and runs both tools inside plain Alpine 3.22.6. The release gate compares fixture output byte-for-byte with the macOS build.
+
+After those checks pass, pushing a `v*` tag publishes the same tested binaries, `SHA256SUMS`, and `SOURCE_REVISION`. The `md-tools-aarch64-unknown-linux-musl.tar.gz` asset contains `usr/local/bin/mdstruct` and `usr/local/bin/mdread` for rootfs assembly. Pin both its release URL and SHA-256 when consuming it. Branch and manual runs upload CI artifacts without creating a release.
+
 ## License
 
 MIT. See [LICENSE.md](LICENSE.md).

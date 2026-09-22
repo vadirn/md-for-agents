@@ -1,0 +1,97 @@
+name: musl tools
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: 1.91.1
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
+      - run: cargo +"$RUST_TOOLCHAIN" test --locked --workspace
+      - run: cargo +"$RUST_TOOLCHAIN" clippy --locked --workspace --all-targets
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --release -p mdstruct -p mdread
+      - run: sh scripts/release-fixtures.sh target/release macos-output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-output
+          path: macos-output
+          if-no-files-found: error
+
+  musl:
+    needs: macos
+    runs-on: ubuntu-24.04-arm
+    env:
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target aarch64-unknown-linux-musl
+      - run: cargo +"$RUST_TOOLCHAIN" test --locked --target aarch64-unknown-linux-musl -p mdstruct -p mdread
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --release --target aarch64-unknown-linux-musl -p mdstruct -p mdread
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: macos-output
+          path: macos-output
+      - name: Verify architecture and static linkage
+        run: |
+          for tool in mdstruct mdread; do
+            binary="target/aarch64-unknown-linux-musl/release/$tool"
+            readelf -h "$binary" | grep -q 'Machine:.*AArch64'
+            if readelf -l "$binary" | grep -q INTERP; then
+              echo "$tool needs a dynamic loader" >&2
+              exit 1
+            fi
+          done
+      - name: Run in plain Alpine and compare macOS output
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD:/work" -w /work alpine:3.22.6 \
+            sh scripts/release-fixtures.sh target/aarch64-unknown-linux-musl/release alpine-output
+          diff -ru macos-output alpine-output
+      - name: Assemble pinned rootfs addition and binary checksums
+        run: |
+          mkdir -p rootfs/usr/local/bin dist
+          for tool in mdstruct mdread; do
+            cp "target/aarch64-unknown-linux-musl/release/$tool" "rootfs/usr/local/bin/$tool"
+            cp "rootfs/usr/local/bin/$tool" "dist/$tool-aarch64-unknown-linux-musl"
+          done
+          tar --sort=name --mtime="@$(git show -s --format=%ct HEAD)" \
+            --owner=0 --group=0 --numeric-owner -C rootfs -cf - . \
+            | gzip -n > dist/md-tools-aarch64-unknown-linux-musl.tar.gz
+          git rev-parse HEAD > dist/SOURCE_REVISION
+          (cd dist && sha256sum mdstruct-* mdread-* md-tools-*.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: musl-tools
+          path: dist
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: musl
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: musl-tools
+          path: dist
+      - name: Publish verified tag assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/*
