@@ -2,7 +2,7 @@
 # so two members cannot drift onto different versions of the same crate.
 [workspace]
 resolver = "3"
-members = ["cli", "mdstruct", "mdread", "mdformat", "mdsearch"]
+members = ["cli", "mdstruct", "mdstruct-wasm", "mdread", "mdformat", "mdsearch"]
 
 [workspace.package]
 version = "0.1.0"
@@ -26,3 +26,12 @@ serde_json = "1"
 serde_yaml = "0.9"
 # The default `cjk` feature adds only `width_cjk`, which mdformat never calls.
 unicode-width = { version = "0.2", default-features = false }
+
+# The WebAssembly build trades speed for size, since a host downloads the module:
+# cargo build --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

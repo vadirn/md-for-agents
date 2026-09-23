@@ -69,6 +69,35 @@ mdstruct --schema-version      # the schema contract version
 
 Run `check` after changing the parser or bumping comrak. Point it at a corpus. It re-verifies that spans still tile each input byte-exactly, and that the inline grammar still holds. A failing input exits 4, and the summary goes to stderr. So it drops into CI as a gate.
 
+## mdstruct in WebAssembly
+
+`mdstruct-wasm` compiles the parser to a WebAssembly module with no imports. A JavaScript host loads it once and parses in-process. For the same input, the JSON is byte-identical to the line `mdstruct -` prints, without the newline.
+
+```js
+import { load } from "./mdstruct.mjs";
+
+const mdstruct = await load(await Bun.file("mdstruct.wasm").arrayBuffer());
+const doc = mdstruct.parse("# Title\n\nSee [[Page]].\n");
+```
+
+The loader, `mdstruct-wasm/mdstruct.mjs`, runs in Bun, Node, and browsers. `parse` returns the document, and `parseJson` returns its JSON text. Both take a string or UTF-8 bytes, and both throw on bytes that are not UTF-8.
+
+Build the module:
+
+```bash
+cargo build --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
+```
+
+It lands at `target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm`. A host without the loader calls three exports:
+
+| Export                          | Contract |
+| ------------------------------- | -------- |
+| `alloc(len) -> ptr`             | Reserves `len` bytes for the input. |
+| `parse_json(ptr, len) -> frame` | Parses the input as `mdstruct -` does. The frame is a little-endian `u32` length, then that many bytes of JSON. |
+| `dealloc(ptr, len)`             | Frees the input with its `len`, or a frame with 4 plus its length. |
+
+Bytes that are not UTF-8 frame `{"error":"..."}` instead of a document.
+
 ## mdformat
 
 `mdformat` rewrites layout:
@@ -122,14 +151,15 @@ The index is built in RAM for the one run, so an edit needs no reindexing.
 ## Layout
 
 ```
-cli/        command-line concerns the tools share: format flag, token estimate, stdout guard
-mdstruct/   the parsing core; every other crate depends on it
-mdread/     progressive-unfolding reader
-mdformat/   block-level passthrough printer
-mdsearch/   BM25 search over a folder
+cli/            command-line concerns the tools share: format flag, token estimate, stdout guard
+mdstruct/       the parsing core; mdread, mdformat, and mdstruct-wasm depend on it
+mdstruct-wasm/  mdstruct as a WebAssembly module, with its JavaScript loader
+mdread/         progressive-unfolding reader
+mdformat/       block-level passthrough printer
+mdsearch/       BM25 search over a folder
 ```
 
-`cli` is a library with no binary. Every other crate ships one. The `mdstruct` library builds without clap when its `cli` feature is off, which is how its dependents take it.
+`cli` is a library with no binary, and `mdstruct-wasm` ships a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` library builds without clap when its `cli` feature is off, which is how its dependents take it.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 
@@ -159,11 +189,21 @@ cargo clippy --workspace --all-targets
 
 Both must pass before a change lands.
 
-## Linux arm64 releases
+`shell.nix` also provides `lld`, which Nix's `rustc` needs to link the WebAssembly build.
+
+## Releases
 
 The `musl tools` workflow checks every main-branch push, pull request, and manual run. It builds `mdstruct` and `mdread` with Rust 1.91.1 on a native arm64 Linux runner, tests the musl build, and runs both tools inside plain Alpine 3.22.6. The release gate compares fixture output byte-for-byte with the macOS build.
 
-After those checks pass, pushing a `v*` tag publishes the same tested binaries, `SHA256SUMS`, and `SOURCE_REVISION`. The `md-tools-aarch64-unknown-linux-musl.tar.gz` asset contains `usr/local/bin/mdstruct` and `usr/local/bin/mdread` for rootfs assembly. Pin both its release URL and SHA-256 when consuming it. Branch and manual runs upload CI artifacts without creating a release.
+The same workflow builds `mdstruct.wasm` with Rust 1.91.1. It runs the fixtures through the module in Node and compares that output byte-for-byte with the macOS build too.
+
+After those checks pass, pushing a `v*` tag publishes the same tested files:
+
+- the musl binaries, and `md-tools-aarch64-unknown-linux-musl.tar.gz`, which holds `usr/local/bin/mdstruct` and `usr/local/bin/mdread` for rootfs assembly
+- `mdstruct.wasm`, with its loader `mdstruct.mjs` and types `mdstruct.d.mts`
+- `SHA256SUMS` and `SOURCE_REVISION`
+
+Pin both the release URL and the SHA-256 of each asset you consume. Branch and manual runs upload CI artifacts without creating a release.
 
 ## License
 

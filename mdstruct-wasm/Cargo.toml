@@ -1,0 +1,14 @@
+[package]
+name = "mdstruct-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "mdstruct as a WebAssembly module: three exported functions return the JSON document `mdstruct -` prints, in-process."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mdstruct.workspace = true
+serde_json.workspace = true

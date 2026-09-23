@@ -79,9 +79,37 @@ jobs:
           path: dist
           if-no-files-found: error
 
+  wasm:
+    needs: macos
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target wasm32-unknown-unknown
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: macos-output
+          path: macos-output
+      - name: Run the fixtures through the module and compare macOS output
+        run: |
+          node scripts/wasm-fixtures.mjs target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm wasm-output
+          for expected in macos-output/*.mdstruct.stdout; do
+            cmp "$expected" "wasm-output/$(basename "$expected")"
+          done
+      - name: Assemble the module and its loader
+        run: |
+          mkdir dist
+          cp target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm dist/mdstruct.wasm
+          cp mdstruct-wasm/mdstruct.mjs mdstruct-wasm/mdstruct.d.mts dist/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wasm
+          path: dist
+          if-no-files-found: error
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: musl
+    needs: [musl, wasm]
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
@@ -90,6 +118,12 @@ jobs:
         with:
           name: musl-tools
           path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wasm
+          path: dist
+      - name: Add the module's checksums
+        run: (cd dist && sha256sum mdstruct.wasm mdstruct.mjs mdstruct.d.mts >> SHA256SUMS)
       - name: Publish verified tag assets
         env:
           GH_TOKEN: ${{ github.token }}
