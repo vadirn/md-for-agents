@@ -12,13 +12,17 @@ repository = "https://github.com/vadirn/md-for-agents"
 
 [workspace.dependencies]
 cli = { path = "cli" }
-mdstruct = { path = "mdstruct" }
+# Members use the parser, not mdstruct's own CLI, so they leave its `cli` feature off.
+mdstruct = { path = "mdstruct", default-features = false }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-comrak = "0.53"
+# comrak's defaults add syntax highlighting, which compiles oniguruma's C, and
+# comrak's own CLI. No member uses either.
+comrak = { version = "0.53", default-features = false }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-unicode-width = "0.2"
+# The default `cjk` feature adds only `width_cjk`, which mdformat never calls.
+unicode-width = { version = "0.2", default-features = false }

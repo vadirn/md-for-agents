@@ -18,7 +18,9 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 ignore = "0.4"
-tantivy = "0.26"
+# The index lives in RAM and uses only the stemmers. The defaults add memory-mapped
+# files, stop words, and lz4 and zstd compression, and zstd compiles C.
+tantivy = { version = "0.26", default-features = false, features = ["stemmer"] }
 
 [dev-dependencies]
 tempfile = "3"

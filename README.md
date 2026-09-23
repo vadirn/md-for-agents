@@ -129,7 +129,7 @@ mdformat/   block-level passthrough printer
 mdsearch/   BM25 search over a folder
 ```
 
-`cli` is a library with no binary. Every other crate ships one.
+`cli` is a library with no binary. Every other crate ships one. The `mdstruct` library builds without clap when its `cli` feature is off, which is how its dependents take it.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 

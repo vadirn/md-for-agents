@@ -6,11 +6,19 @@ license.workspace = true
 repository.workspace = true
 description = "Shared comrak-backed markdown structural-parsing core: locates structure, emits half-open byte spans, never restringifies."
 
+[features]
+default = ["cli"]
+# Only the binary parses arguments, so a library consumer can build without clap.
+cli = ["dep:clap"]
+
+[[bin]]
+name = "mdstruct"
+path = "src/bin/mdstruct.rs"
+required-features = ["cli"]
+
 [dependencies]
-clap.workspace = true
+clap = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 comrak.workspace = true
 sha2 = "0.10"
-
-[dev-dependencies]
