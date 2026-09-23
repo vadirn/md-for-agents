@@ -16,13 +16,13 @@ jobs:
   macos:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
       - run: cargo +"$RUST_TOOLCHAIN" test --locked --workspace
       - run: cargo +"$RUST_TOOLCHAIN" clippy --locked --workspace --all-targets
       - run: cargo +"$RUST_TOOLCHAIN" build --locked --release -p mdstruct -p mdread
       - run: sh scripts/release-fixtures.sh target/release macos-output
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-output
           path: macos-output
@@ -36,12 +36,12 @@ jobs:
       CC_aarch64_unknown_linux_musl: musl-gcc
       RUSTFLAGS: -C target-feature=+crt-static
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sudo apt-get update && sudo apt-get install -y musl-tools
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target aarch64-unknown-linux-musl
       - run: cargo +"$RUST_TOOLCHAIN" test --locked --target aarch64-unknown-linux-musl -p mdstruct -p mdread
       - run: cargo +"$RUST_TOOLCHAIN" build --locked --release --target aarch64-unknown-linux-musl -p mdstruct -p mdread
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-output
           path: macos-output
@@ -73,7 +73,7 @@ jobs:
             | gzip -n > dist/md-tools-aarch64-unknown-linux-musl.tar.gz
           git rev-parse HEAD > dist/SOURCE_REVISION
           (cd dist && sha256sum mdstruct-* mdread-* md-tools-*.tar.gz > SHA256SUMS)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: musl-tools
           path: dist
@@ -83,10 +83,10 @@ jobs:
     needs: macos
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target wasm32-unknown-unknown
       - run: cargo +"$RUST_TOOLCHAIN" build --locked --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-output
           path: macos-output
@@ -101,7 +101,7 @@ jobs:
           mkdir dist
           cp target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm dist/mdstruct.wasm
           cp mdstruct-wasm/mdstruct.mjs mdstruct-wasm/mdstruct.d.mts dist/
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wasm
           path: dist
@@ -114,11 +114,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: musl-tools
           path: dist
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm
           path: dist
