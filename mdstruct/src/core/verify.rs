@@ -148,17 +148,6 @@ fn flatten_headings(hs: &[Heading], out: &mut Vec<Span>) {
     }
 }
 
-/// Collect every `tableCell` span (recursing Table → TableRow → TableCell), so
-/// the inline oracle can locate a wikilink that lives inside a cell.
-fn collect_table_cell_spans(nodes: &[Node], out: &mut Vec<Span>) {
-    for n in nodes {
-        if let Node::TableCell { span, .. } = n {
-            out.push(*span);
-        }
-        collect_table_cell_spans(n.children(), out);
-    }
-}
-
 /// The two CommonMark emphasis delimiter characters.
 fn is_emph_delim(c: char) -> bool {
     c == '*' || c == '_'
@@ -166,23 +155,9 @@ fn is_emph_delim(c: char) -> bool {
 
 /// Per-inline grammar oracle + sub-span nesting.
 fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
-    let mut cells: Vec<Span> = Vec::new();
-    collect_table_cell_spans(&doc.nodes, &mut cells);
     for inl in &doc.inlines {
         let sp = inl.span();
         let s = slice(source, sp)?;
-        // comrak's inline sourcepos shifts on an escaped-pipe cell, so a
-        // table-cell wikilink, embed or emphasis has an imprecise span and
-        // fails the `]]` / `*…*` shape check. All three are emitted anyway, so
-        // all three are exempt from the shape and nesting oracle here. The
-        // boundary slice above still holds: the span is a valid on-char slice.
-        if matches!(
-            inl,
-            Inline::Wikilink { .. } | Inline::Emph { .. } | Inline::Strong { .. }
-        ) && cells.iter().any(|c| nests(*c, sp))
-        {
-            continue;
-        }
         let (ok, sub) = match inl {
             Inline::Link { text_span, .. } => (
                 s.starts_with('[') && (s.ends_with(')') || s.ends_with(']')),

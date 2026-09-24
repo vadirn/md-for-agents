@@ -248,9 +248,7 @@ pub enum Inline {
     },
     Wikilink {
         /// Decoded link target: comrak's `WikiLink.url` (or, for an embed, the
-        /// pre-pipe raw inner). The RELIABLE string a consumer reads instead of
-        /// slicing `span`, whose bytes shift inside escaped-pipe table cells
-        ///. (Schema 1.1.)
+        /// pre-pipe inner, where a table cell's `\|` is the pipe). (Schema 1.1.)
         target: String,
         page: String,
         heading: Option<String>,

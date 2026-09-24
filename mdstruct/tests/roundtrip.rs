@@ -108,6 +108,106 @@ fn table_cell_wikilink_and_embed() {
     assert_eq!(wl("Gamma"), Some((Some("display".to_string()), false)));
 }
 
+/// Each inline as `(kind, raw slice)`, in document order.
+fn inline_slices<'s>(d: &mdstruct::Document, src: &'s str) -> Vec<(&'static str, &'s str)> {
+    d.inlines
+        .iter()
+        .map(|i| (i.kind(), slice(src, i.span())))
+        .collect()
+}
+
+#[test]
+fn table_cell_span_counts_the_escaped_pipes_before_it() {
+    // comrak drops the `\` of each `\|` in a cell before it parses inlines, so
+    // every one before an inline would pull that inline's span one byte short.
+    for cell in [
+        "[[X]]",
+        "a \\| [[X]]",
+        "a \\| b \\| [[X]]",
+        "a \\| b \\| c \\| [[X]]",
+        "[[X]] \\| a",
+        // Only an odd backslash run escapes the pipe, so only it loses a byte.
+        "a \\\\| [[X]]",
+        "a \\\\\\| [[X]]",
+    ] {
+        let src = format!("| h |\n| --- |\n| {cell} |\n");
+        let d = doc(&src);
+        assert_eq!(
+            inline_slices(&d, &src),
+            [("wikilink", "[[X]]")],
+            "cell {cell:?}"
+        );
+    }
+}
+
+#[test]
+fn table_cell_escaped_pipe_wikilink_slices_exactly() {
+    let src = "| h |\n| --- |\n| [[Page\\|alias]] |\n";
+    let d = doc(src);
+    let [
+        mdstruct::Inline::Wikilink {
+            target,
+            alias,
+            alias_span,
+            span,
+            ..
+        },
+    ] = d.inlines.as_slice()
+    else {
+        panic!("expected one wikilink, got {:?}", d.inlines);
+    };
+    assert_eq!(target, "Page");
+    assert_eq!(alias.as_deref(), Some("alias"));
+    assert_eq!(slice(src, *span), "[[Page\\|alias]]");
+    assert_eq!(slice(src, alias_span.unwrap()), "alias");
+}
+
+#[test]
+fn table_cell_bare_pipe_splits_the_link() {
+    // GFM splits the row at a bare `|`, as Obsidian does, so neither form is a
+    // link: one cell ends in `[[Page` or `![[img.png`, and nothing closes it.
+    for cell in ["[[Page|alias]]", "![[img.png|100]]"] {
+        let src = format!("| a | b |\n| --- | --- |\n| {cell} | c |\n");
+        let d = doc(&src);
+        assert!(d.inlines.is_empty(), "cell {cell:?}: {:?}", d.inlines);
+    }
+}
+
+#[test]
+fn table_cell_embed_reads_its_escaped_pipe_as_the_separator() {
+    let src = "| a | b |\n| --- | --- |\n| ![[img.png\\|100]] | c |\n";
+    let d = doc(src);
+    let [
+        mdstruct::Inline::Wikilink {
+            target,
+            page,
+            alias,
+            embed: true,
+            span,
+            ..
+        },
+    ] = d.inlines.as_slice()
+    else {
+        panic!("expected one embed, got {:?}", d.inlines);
+    };
+    assert_eq!(target, "img.png");
+    assert_eq!(page, "img.png");
+    assert_eq!(alias.as_deref(), Some("100"));
+    assert_eq!(slice(src, *span), "![[img.png\\|100]]");
+}
+
+#[test]
+fn paragraph_lines_above_a_table_keep_raw_spans() {
+    // comrak also drops the `\` of each `\|` in the paragraph lines it splits
+    // off above a table's header row. Each line shifts by its own escapes only.
+    let src = "one \\| [[A]]\ntwo \\| b \\| [[B]]\n| h |\n| - |\n| c |\n";
+    let d = doc(src);
+    assert_eq!(
+        inline_slices(&d, src),
+        [("wikilink", "[[A]]"), ("wikilink", "[[B]]")]
+    );
+}
+
 #[test]
 fn empty_pipe_wikilink() {
     let src = "See [[Topic|]] and [[Topic]].\n";

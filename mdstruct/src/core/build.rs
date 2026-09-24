@@ -3,7 +3,9 @@
 //! `sectionSpan`, decomposes wikilinks, flags `![[…]]` embeds via a pre-pass,
 //! and scans regions.
 
-use comrak::nodes::{AstNode, ListType, NodeValue};
+use std::borrow::Cow;
+
+use comrak::nodes::{AstNode, ListType, NodeValue, Sourcepos};
 use comrak::{Arena, parse_document};
 use sha2::{Digest, Sha256};
 
@@ -56,13 +58,14 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 /// Combined span of a node's direct children (first start → last end), or
 /// `None` if none. Used for link text / image alt / wikilink alias regions.
-fn children_span<'a>(node: &'a AstNode<'a>, idx: &LineIndex) -> Option<Span> {
+/// `dropped` is as in [`raw_span_of`].
+fn children_span<'a>(node: &'a AstNode<'a>, idx: &LineIndex, dropped: &[usize]) -> Option<Span> {
     let mut lo = usize::MAX;
     let mut hi = 0usize;
     let mut any = false;
     for c in node.children() {
         let sp = c.data.borrow().sourcepos;
-        let s = idx.span_of(sp);
+        let s = raw_span_of(idx, sp, dropped);
         any = true;
         lo = lo.min(s.start);
         hi = hi.max(s.end);
@@ -70,14 +73,77 @@ fn children_span<'a>(node: &'a AstNode<'a>, idx: &LineIndex) -> Option<Span> {
     if any { Some(Span::new(lo, hi)) } else { None }
 }
 
+/// The block whose `\|` escapes comrak dropped before parsing `node`'s inlines:
+/// its table cell, or the paragraph comrak split off above a table's header
+/// row. The header row was the last line of that paragraph until the
+/// delimiter row turned it into a table, so the two sit on adjacent lines.
+fn pipe_unescaped_block<'a>(node: &'a AstNode<'a>) -> Option<&'a AstNode<'a>> {
+    node.ancestors()
+        .skip(1)
+        .find(|a| match a.data.borrow().value {
+            NodeValue::TableCell => true,
+            NodeValue::Paragraph => a.next_sibling().is_some_and(|t| {
+                let t = t.data.borrow();
+                matches!(t.value, NodeValue::Table(_))
+                    && t.sourcepos.start.line == a.data.borrow().sourcepos.end.line + 1
+            }),
+            _ => false,
+        })
+}
+
+/// Offsets of the backslashes comrak's `unescape_pipes` drops from `span`: the
+/// `\` of each `\|`, unless a backslash before it already escapes it.
+fn dropped_pipe_escapes(source: &str, span: Span) -> Vec<usize> {
+    let mut dropped = Vec::new();
+    let mut escaping = false;
+    for (i, &b) in source.as_bytes()[span.start..span.end].iter().enumerate() {
+        if escaping {
+            if b == b'|' {
+                dropped.push(span.start + i - 1);
+            }
+            escaping = false;
+        } else if b == b'\\' {
+            escaping = true;
+        }
+    }
+    dropped
+}
+
+/// `idx.span_of(sp)` for a node comrak parsed after dropping the backslashes
+/// at `dropped`. comrak counts columns in the unescaped line, so each dropped
+/// byte before an offset on its line pulls that offset one byte short.
+fn raw_span_of(idx: &LineIndex, sp: Sourcepos, dropped: &[usize]) -> Span {
+    let span = idx.span_of(sp);
+    if dropped.is_empty() {
+        return span;
+    }
+    let raw = |pos: usize, line: usize| {
+        let line_start = idx.line_start(line);
+        let mut raw = pos;
+        for &d in dropped.iter().filter(|&&d| d >= line_start) {
+            if d > raw {
+                break;
+            }
+            raw += 1;
+        }
+        raw
+    };
+    let start = raw(span.start, sp.start.line);
+    if span.is_empty() {
+        return Span::new(start, start);
+    }
+    // Map the last byte, not the exclusive end: a backslash dropped right
+    // after the node would otherwise stretch the span over it.
+    Span::new(start, raw(span.end - 1, sp.end.line) + 1)
+}
+
 fn opt_string(s: String) -> Option<String> {
     if s.is_empty() { None } else { Some(s) }
 }
 
 /// The DECODED display text of a comrak WikiLink: its child `Text` literals
-/// concatenated (comrak un-escapes them, so this is reliable inside a table
-/// cell where the raw span is not). Empty when the link has no display child
-/// (the empty-pipe `[[X|]]`).
+/// concatenated (comrak un-escapes them). Empty when the link has no display
+/// child (the empty-pipe `[[X|]]`).
 fn wikilink_display<'a>(node: &'a AstNode<'a>) -> String {
     let mut s = String::new();
     for c in node.children() {
@@ -133,7 +199,8 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
             }
             NodeValue::Heading(h) => {
                 let span = idx.span_of(sp);
-                let text_span = children_span(top, &idx).unwrap_or(Span::new(span.end, span.end));
+                let text_span =
+                    children_span(top, &idx, &[]).unwrap_or(Span::new(span.end, span.end));
                 flat.push(FlatHeading {
                     level: h.level,
                     setext: h.setext,
@@ -160,10 +227,9 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     // always built (fenced-or-indented code-block spans + inline-code
     // `NodeValue::Code` spans + multi-line HTML-comment blocks). Frontmatter
     // anchors are intentionally left live. Comrak's block-level sourcepos is
-    // reliable for indented code blocks (only inline sourcepos is unreliable —
-    // see the wikilink/embed mask below), so masking by the `CodeBlock` span is
-    // sound; this also brings the region mask into parity with that mask, which
-    // already masks all `CodeBlock(_)`.
+    // reliable for indented code blocks, so masking by the `CodeBlock` span is
+    // sound; this also brings the region mask into parity with the embed mask
+    // in `collect_inlines`, which already masks all `CodeBlock(_)`.
     let mut region_mask = code_block_mask_spans(root, &idx);
     for node in root.descendants() {
         let d = node.data.borrow();
@@ -635,29 +701,45 @@ fn collect_inlines<'a>(
     // masked: an inline-code cell is already masked by its own `Code` span, so
     // the pre-pass stays free of phantom embeds without a whole-table mask.
     let mut mask: Vec<Span> = Vec::new();
+    let mut rows: Vec<Span> = Vec::new();
+    let mut cells: Vec<Span> = Vec::new();
+    // The dropped `\|` backslashes of the last block `pipe_unescaped_block`
+    // found. Pre-order visits a block's descendants in one run, so this scans
+    // each block once.
+    let mut escapes: Option<(&AstNode, Vec<usize>)> = None;
 
     for node in root.descendants() {
         // Match on `&d.value`, not a NodeValue clone; clone only the small owned
         // fields (url/title/name) in arms that keep them. No `borrow_mut` in the
-        // loop; `in_table`/`children_span` re-borrow shared, so holding this
-        // `Ref` across the arm is sound.
+        // loop; `pipe_unescaped_block`/`children_span` re-borrow shared, so
+        // holding this `Ref` across the arm is sound.
         let d = node.data.borrow();
         let sp = d.sourcepos;
-        if let NodeValue::Code(_)
-        | NodeValue::CodeBlock(_)
-        | NodeValue::FrontMatter(_)
-        | NodeValue::HtmlBlock(_) = &d.value
-        {
-            mask.push(idx.span_of(sp));
+        let dropped: &[usize] = match pipe_unescaped_block(node) {
+            Some(block) => {
+                if !escapes.as_ref().is_some_and(|(b, _)| b.same_node(block)) {
+                    let block_span = idx.span_of(block.data.borrow().sourcepos);
+                    escapes = Some((block, dropped_pipe_escapes(source, block_span)));
+                }
+                escapes.as_ref().map_or(&[], |(_, e)| e)
+            }
+            None => &[],
+        };
+        let span = raw_span_of(idx, sp, dropped);
+        match &d.value {
+            NodeValue::Code(_)
+            | NodeValue::CodeBlock(_)
+            | NodeValue::FrontMatter(_)
+            | NodeValue::HtmlBlock(_) => mask.push(span),
+            NodeValue::TableRow(_) => rows.push(span),
+            NodeValue::TableCell => cells.push(span),
+            _ => {}
         }
-        // comrak's inline sourcepos inside a GFM table cell is unreliable:
-        // an escaped pipe shifts the offsets. Links, code spans, images and
-        // footnote refs stay suppressed there, since a consumer can re-slice
-        // the raw cell bytes. Wikilinks, embeds and emphasis are emitted
-        // anyway: a consumer reads their decoded `target`/`alias`, or only
-        // asks whether emphasis is present, and an imprecise span still
-        // answers that.
-        if in_table(node)
+        // Links, code spans, images and footnote refs stay suppressed in a
+        // table cell.
+        let in_cell = pipe_unescaped_block(node)
+            .is_some_and(|b| matches!(b.data.borrow().value, NodeValue::TableCell));
+        if in_cell
             && !matches!(
                 &d.value,
                 NodeValue::WikiLink(_) | NodeValue::Emph | NodeValue::Strong
@@ -665,14 +747,13 @@ fn collect_inlines<'a>(
         {
             continue;
         }
-        let span = idx.span_of(sp);
         let start_line = sp.start.line as u32;
         let slice = source.get(span.start..span.end).unwrap_or("");
         match &d.value {
             NodeValue::Link(nl) => {
                 if slice.starts_with('[') {
-                    let text_span =
-                        children_span(node, idx).unwrap_or(Span::new(span.start, span.start));
+                    let text_span = children_span(node, idx, dropped)
+                        .unwrap_or(Span::new(span.start, span.start));
                     inlines.push(Inline::Link {
                         url: nl.url.clone(),
                         title: opt_string(nl.title.clone()),
@@ -691,7 +772,7 @@ fn collect_inlines<'a>(
             }
             NodeValue::Image(nl) => {
                 let alt_span =
-                    children_span(node, idx).unwrap_or(Span::new(span.start, span.start));
+                    children_span(node, idx, dropped).unwrap_or(Span::new(span.start, span.start));
                 inlines.push(Inline::Image {
                     url: nl.url.clone(),
                     title: opt_string(nl.title.clone()),
@@ -702,13 +783,12 @@ fn collect_inlines<'a>(
             }
             NodeValue::WikiLink(nw) => {
                 let t = wikilink::decompose(&nw.url);
-                let alias_span = children_span(node, idx);
+                let alias_span = children_span(node, idx, dropped);
                 // A pipe separates target from alias. comrak drops multi-pipe
                 // links (no node), so an emitted wikilink has 0 or 1 pipe: a
                 // `|` byte anywhere in the (start-anchored) slice IS the
                 // separator. The alias itself is the DECODED display child
-                // (`""` for the empty-pipe `[[X|]]`), reliable where a cell
-                // span slice is not.
+                // (`""` for the empty-pipe `[[X|]]`).
                 let alias = if slice.contains('|') {
                     Some(wikilink_display(node))
                 } else {
@@ -747,7 +827,7 @@ fn collect_inlines<'a>(
     }
 
     if opts.wikilinks {
-        collect_embeds(source, idx, &mask, &mut inlines);
+        collect_embeds(source, idx, &mask, &rows, &cells, &mut inlines);
     }
 
     inlines.sort_by_key(|i| i.span().start);
@@ -758,13 +838,27 @@ fn collect_inlines<'a>(
 /// raw source. `embed = true`; the target decomposes like a normal wikilink.
 ///
 /// Context discipline: Obsidian embeds are single-line, so the closing `]]` is
-/// sought only within the `!`'s own line; skip an embed whose `!` sits inside a
-/// `mask` span (code / frontmatter) or is backslash-escaped; an inner range that
-/// reopens with `[[` is an unclosed embed whose `]]` belongs to a nested
-/// wikilink — skip it too (the nested `[[Real]]` is comrak's).
-fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Vec<Inline>) {
+/// sought only within the `!`'s own line, or its own table cell in a table row;
+/// skip an embed whose `!` sits inside a `mask` span (code / frontmatter) or is
+/// backslash-escaped; an inner range that reopens with `[[` is an unclosed
+/// embed whose `]]` belongs to a nested wikilink — skip it too (the nested
+/// `[[Real]]` is comrak's).
+fn collect_embeds(
+    source: &str,
+    idx: &LineIndex,
+    mask: &[Span],
+    rows: &[Span],
+    cells: &[Span],
+    inlines: &mut Vec<Inline>,
+) {
     let bytes = source.as_bytes();
-    let masked = |off: usize| mask.iter().any(|s| off >= s.start && off < s.end);
+    let within = |spans: &[Span], off: usize| {
+        spans
+            .iter()
+            .find(|s| off >= s.start && off < s.end)
+            .copied()
+    };
+    let masked = |off: usize| within(mask, off).is_some();
     let mut i = 0;
     // `i + 3 <= len` so a trailing `![[x]]` flush against EOF is not missed.
     while i + 3 <= bytes.len() {
@@ -785,7 +879,15 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
                 continue;
             }
             let line = line_of(idx, i);
-            let search_end = idx.next_line_start(line).min(bytes.len());
+            // A table row splits at each bare `|` before its cells parse, so an
+            // embed in a row must close inside its own cell. A `!` past the
+            // last column is dropped along with its cell.
+            let cell = within(cells, i);
+            if cell.is_none() && within(rows, i).is_some() {
+                i += 1;
+                continue;
+            }
+            let search_end = cell.map_or(idx.next_line_start(line).min(bytes.len()), |c| c.end);
             if let Some(rel_end) = source[i + 3..search_end].find("]]") {
                 let inner_end = i + 3 + rel_end;
                 let inner = &source[i + 3..inner_end];
@@ -796,13 +898,18 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
                     continue;
                 }
                 let end = inner_end + 2;
-                // Split on the FIRST pipe: target before, alias after (mirrors
-                // the alias keeps any later pipes, and an
-                // empty-pipe `![[X|]]` yields `Some("")`). The embed span is a
-                // byte-exact literal scan, so this raw split is reliable.
+                // In a cell, comrak unescapes `\|` before the cell's wikilinks
+                // parse, so `\|` separates an embed there too.
+                let inner = match cell {
+                    Some(_) => Cow::Owned(unescape_pipes(source, Span::new(i + 3, inner_end))),
+                    None => Cow::Borrowed(inner),
+                };
+                // Split on the FIRST pipe: target before, alias after. The alias
+                // keeps any later pipes, and an empty-pipe `![[X|]]` yields
+                // `Some("")`. The span stays the byte-exact literal scan.
                 let (target, alias) = match inner.split_once('|') {
                     Some((tgt, ali)) => (tgt, Some(ali.to_string())),
-                    None => (inner, None),
+                    None => (&*inner, None),
                 };
                 let t = wikilink::decompose(target);
                 inlines.push(Inline::Wikilink {
@@ -824,18 +931,16 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
     }
 }
 
-fn in_table<'a>(node: &'a AstNode<'a>) -> bool {
-    let mut cur = node.parent();
-    while let Some(p) = cur {
-        if matches!(
-            p.data.borrow().value,
-            NodeValue::TableCell | NodeValue::TableRow(_) | NodeValue::Table(_)
-        ) {
-            return true;
-        }
-        cur = p.parent();
+/// `source[span]` without the backslashes `dropped_pipe_escapes` finds.
+fn unescape_pipes(source: &str, span: Span) -> String {
+    let mut out = String::with_capacity(span.end - span.start);
+    let mut from = span.start;
+    for d in dropped_pipe_escapes(source, span) {
+        out.push_str(&source[from..d]);
+        from = d + 1;
     }
-    false
+    out.push_str(&source[from..span.end]);
+    out
 }
 
 /// 1-based line containing byte offset `pos`.
@@ -918,8 +1023,8 @@ mod tests {
 
     #[test]
     fn wikilink_in_table_cell_is_emitted() {
-        // 1.1: comrak emits the WikiLink inside the cell; the `in_table` guard
-        // no longer suppresses it. `target` comes from the decoded url.
+        // 1.1: comrak emits the WikiLink inside the cell, and so does the
+        // inline walk. `target` comes from the decoded url.
         let d = build("| a | b |\n| --- | --- |\n| [[Note]] | c |\n");
         assert!(
             d.inlines.iter().any(|i| matches!(
@@ -933,8 +1038,7 @@ mod tests {
     #[test]
     fn table_cell_wikilink_alias_from_escaped_pipe() {
         // `[[a\|b]]` in a cell: comrak sees the escaped pipe as the separator
-        // (url="a", display="b"). The span shifts (drops the final `]`), so the
-        // consumer must read `target`/`alias`, not the span.
+        // (url="a", display="b").
         let d = build("| x |\n| --- |\n| [[a\\|b]] |\n");
         let wl = d
             .inlines
