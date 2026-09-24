@@ -735,18 +735,6 @@ fn collect_inlines<'a>(
             NodeValue::TableCell => cells.push(span),
             _ => {}
         }
-        // Links, code spans, images and footnote refs stay suppressed in a
-        // table cell.
-        let in_cell = pipe_unescaped_block(node)
-            .is_some_and(|b| matches!(b.data.borrow().value, NodeValue::TableCell));
-        if in_cell
-            && !matches!(
-                &d.value,
-                NodeValue::WikiLink(_) | NodeValue::Emph | NodeValue::Strong
-            )
-        {
-            continue;
-        }
         let start_line = sp.start.line as u32;
         let slice = source.get(span.start..span.end).unwrap_or("");
         match &d.value {

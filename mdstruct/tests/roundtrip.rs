@@ -163,6 +163,28 @@ fn table_cell_escaped_pipe_wikilink_slices_exactly() {
 }
 
 #[test]
+fn table_cell_links_images_and_code_spans_are_emitted() {
+    let src = "| h |\n| --- |\n| a \\| [x](https://e.com) \\| `code` \\| ![i](p.png) \\| <https://f.com> |\n";
+    let d = doc(src);
+    assert_eq!(
+        inline_slices(&d, src),
+        [
+            ("link", "[x](https://e.com)"),
+            ("codeSpan", "`code`"),
+            ("image", "![i](p.png)"),
+            ("autolink", "<https://f.com>"),
+        ]
+    );
+    for inline in &d.inlines {
+        match inline {
+            mdstruct::Inline::Link { text_span, .. } => assert_eq!(slice(src, *text_span), "x"),
+            mdstruct::Inline::Image { alt_span, .. } => assert_eq!(slice(src, *alt_span), "i"),
+            _ => {}
+        }
+    }
+}
+
+#[test]
 fn table_cell_bare_pipe_splits_the_link() {
     // GFM splits the row at a bare `|`, as Obsidian does, so neither form is a
     // link: one cell ends in `[[Page` or `![[img.png`, and nothing closes it.

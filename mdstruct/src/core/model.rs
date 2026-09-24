@@ -13,7 +13,7 @@ use super::region::Dangling;
 ///
 /// A consumer pins it, so a stale binary emitting an older minor fails loud
 /// rather than silently reading a document missing what that minor added.
-pub const SCHEMA_VERSION: &str = "1.3";
+pub const SCHEMA_VERSION: &str = "1.4";
 
 /// Half-open UTF-8 byte span `[start, end)` — the sole slicing primitive.
 /// Serializes as a two-element array `[start, end]`.
@@ -224,7 +224,8 @@ pub enum Node {
 /// (not `kind`); wikilink target decomposed at top level (no polymorphic
 /// `target`). Descriptive and EXCLUDED from total tiling: an inline covers only
 /// the bytes of its own markup, and the unmarked text between inlines is emitted
-/// nowhere.
+/// nowhere. Every kind is emitted inside table cells too, spanning raw bytes
+/// despite comrak dropping `\|` backslashes there. (Schema 1.4.)
 #[derive(Debug, Clone, Serialize)]
 #[serde(
     tag = "type",
