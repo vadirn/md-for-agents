@@ -1,5 +1,8 @@
 // Loads mdread.wasm and folds or unfolds Markdown in-process. Runs in Bun, Node,
 // and browsers: it needs only WebAssembly, TextEncoder, and TextDecoder.
+//
+// A host vendors this file alone beside its module, so it repeats the call
+// sequence mdstruct.mjs uses rather than importing one both would share.
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

@@ -13,3 +13,4 @@ crate-type = ["cdylib"]
 mdread.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+wasm-abi.workspace = true

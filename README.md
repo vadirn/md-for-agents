@@ -199,11 +199,12 @@ mdstruct/       the parsing core; mdread, mdformat, and mdstruct-wasm depend on 
 mdstruct-wasm/  mdstruct as a WebAssembly module, with its JavaScript loader
 mdread/         progressive-unfolding reader
 mdread-wasm/    mdread as a WebAssembly module, with its JavaScript loader
+wasm-abi/       the host edge both WebAssembly modules share: alloc, dealloc, and the frame
 mdformat/       block-level passthrough printer
 mdsearch/       BM25 search over a folder
 ```
 
-`cli` is a library with no binary, and `mdstruct-wasm` and `mdread-wasm` each ship a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` and `mdread` libraries build without clap when their `cli` feature is off, which is how their dependents take them.
+`cli` and `wasm-abi` are libraries with no binary, and `mdstruct-wasm` and `mdread-wasm` each ship a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` and `mdread` libraries build without clap when their `cli` feature is off, which is how their dependents take them.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 

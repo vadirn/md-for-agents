@@ -1,0 +1,11 @@
+[package]
+name = "wasm-abi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The host edge the WebAssembly modules in this workspace share: blocks a host writes into, and the JSON frame a module answers with."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

@@ -709,6 +709,7 @@ dependencies = [
  "mdread",
  "serde",
  "serde_json",
+ "wasm-abi",
 ]
 
 [[package]]
@@ -743,6 +744,7 @@ version = "0.3.0"
 dependencies = [
  "mdstruct",
  "serde_json",
+ "wasm-abi",
 ]
 
 [[package]]
@@ -1473,6 +1475,14 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wasm-abi"
+version = "0.3.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

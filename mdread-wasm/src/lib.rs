@@ -8,13 +8,16 @@
 //! `{"address"?: ..., "depth"?: ..., "full"?: ..., "threshold"?: ...}`. The
 //! response is `{"text": ...}`, holding what `mdread - [address]` prints for
 //! them. The host frees the blocks and the frame with `dealloc`, passing the
-//! length each was allocated with.
+//! length each was allocated with. `alloc`, `dealloc`, and the frame come from
+//! [`wasm_abi`].
 //!
 //! Only the wasm32 build exports the functions. Natively they stay plain Rust, so
 //! the tests below exercise the contract without a WebAssembly runtime.
 
 use mdread::{Dialect, read_content, render};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+wasm_abi::exports!();
 
 /// The `mdread` binary's inline cutoff when `--threshold` is absent.
 const DEFAULT_THRESHOLD: usize = 2000;
@@ -30,21 +33,12 @@ struct Options {
     threshold: Option<u64>,
 }
 
-/// Reserve `len` bytes for the host to write into. Free them with
-/// `dealloc(ptr, len)`.
-#[cfg_attr(target_arch = "wasm32", unsafe(no_mangle))]
-pub extern "C" fn alloc(len: usize) -> *mut u8 {
-    Box::into_raw(vec![0u8; len].into_boxed_slice()).cast()
-}
-
-/// Free the `len` bytes at `ptr`.
-///
-/// # Safety
-/// `ptr` and `len` must name one live block: a block from `alloc(len)`, or a
-/// frame from `read_json` with `len` = 4 + its length prefix.
-#[cfg_attr(target_arch = "wasm32", unsafe(no_mangle))]
-pub unsafe extern "C" fn dealloc(ptr: *mut u8, len: usize) {
-    drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len)) });
+/// What the frame holds: `{"text": ...}` or `{"error": ...}`.
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+enum Response {
+    Text(String),
+    Error(String),
 }
 
 /// Read the content at `content_ptr` as `mdread -` reads its stdin, with the
@@ -64,17 +58,12 @@ pub unsafe extern "C" fn read_json(
     options_ptr: *const u8,
     options_len: usize,
 ) -> *mut u8 {
-    let content = unsafe { std::slice::from_raw_parts(content_ptr, content_len) };
-    let options = unsafe { std::slice::from_raw_parts(options_ptr, options_len) };
-    frame(&response_json(content, options))
-}
-
-fn response_json(content: &[u8], options: &[u8]) -> Vec<u8> {
-    let response = match read(content, options) {
-        Ok(text) => serde_json::json!({ "text": text }),
-        Err(error) => serde_json::json!({ "error": error }),
-    };
-    serde_json::to_vec(&response).expect("an object of one string always serializes")
+    let content = unsafe { wasm_abi::input(content_ptr, content_len) };
+    let options = unsafe { wasm_abi::input(options_ptr, options_len) };
+    wasm_abi::frame(&match read(content, options) {
+        Ok(text) => Response::Text(text),
+        Err(error) => Response::Error(error),
+    })
 }
 
 fn read(content: &[u8], options: &[u8]) -> Result<String, String> {
@@ -104,36 +93,20 @@ fn read(content: &[u8], options: &[u8]) -> Result<String, String> {
     Ok(String::from_utf8(text).expect("the text is written from strings"))
 }
 
-fn frame(json: &[u8]) -> *mut u8 {
-    let mut out = Vec::with_capacity(4 + json.len());
-    out.extend_from_slice(&(json.len() as u32).to_le_bytes());
-    out.extend_from_slice(json);
-    Box::into_raw(out.into_boxed_slice()).cast()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::{Value, json};
 
-    /// Copy `bytes` into a block from `alloc`, as the host does.
-    fn put(bytes: &[u8]) -> *mut u8 {
-        let ptr = alloc(bytes.len());
-        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
-        ptr
-    }
-
     /// One host round trip: copy both in, read, read the frame, free all three.
     fn call(content: &[u8], options: &[u8]) -> Value {
+        use wasm_abi::host::{put, take};
         let (content_ptr, options_ptr) = (put(content), put(options));
         unsafe {
             let out = read_json(content_ptr, content.len(), options_ptr, options.len());
             dealloc(content_ptr, content.len());
             dealloc(options_ptr, options.len());
-            let len = u32::from_le_bytes(*out.cast::<[u8; 4]>()) as usize;
-            let json = std::slice::from_raw_parts(out.add(4), len).to_vec();
-            dealloc(out, 4 + len);
-            serde_json::from_slice(&json).unwrap()
+            serde_json::from_slice(&take(out)).unwrap()
         }
     }
 
