@@ -67,7 +67,7 @@ const overview = mdread.read(page);
 const section = mdread.read(page, { address: "2.1", depth: 1 });
 ```
 
-The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string or UTF-8 bytes, and these options. Each option the caller omits takes the CLI's default.
+The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string or UTF-8 bytes, and these options. Each option the caller omits or sets to `null` takes the CLI's default. `depth` and `threshold` take non-negative integers, and `Infinity` or `NaN` throws instead of reading as omitted.
 
 | Option      | CLI equivalent |
 | ----------- | -------------- |

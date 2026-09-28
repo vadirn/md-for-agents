@@ -25,10 +25,9 @@ const DEFAULT_THRESHOLD: usize = 2000;
 #[serde(deny_unknown_fields)]
 struct Options {
     address: Option<String>,
-    depth: Option<usize>,
-    #[serde(default)]
-    full: bool,
-    threshold: Option<usize>,
+    depth: Option<u64>,
+    full: Option<bool>,
+    threshold: Option<u64>,
 }
 
 /// Reserve `len` bytes for the host to write into. Free them with
@@ -85,14 +84,18 @@ fn read(content: &[u8], options: &[u8]) -> Result<String, String> {
     // The read `mdread -` does on stdin, so bytes that are not UTF-8 fail with
     // the CLI's own message.
     let content = std::io::read_to_string(content).map_err(|e| e.to_string())?;
+    // The CLI on a 64-bit host takes any `u64`. Here `usize` is 32 bits, but no
+    // count a reading compares against a bound reaches `usize::MAX`, so capping
+    // there reads as the CLI does.
+    let cap = |n: u64| usize::try_from(n).unwrap_or(usize::MAX);
     // The path and dialect the CLI uses for `mdread -` without flags.
     let reading = read_content(
         "-",
         &content,
         options.address.as_deref(),
-        options.depth,
-        options.full,
-        options.threshold.unwrap_or(DEFAULT_THRESHOLD),
+        options.depth.map(cap),
+        options.full.unwrap_or(false),
+        options.threshold.map_or(DEFAULT_THRESHOLD, cap),
         Dialect::default(),
     )
     .map_err(|e| e.to_string())?;
@@ -240,7 +243,25 @@ mod tests {
             ),
             defaults
         );
+        assert_eq!(
+            text(
+                DOC,
+                json!({ "address": "1", "depth": null, "full": null, "threshold": null })
+            ),
+            defaults
+        );
         assert_eq!(text(DOC, json!({ "address": null })), text(DOC, json!({})));
+    }
+
+    #[test]
+    fn any_u64_the_cli_takes_is_a_bound() {
+        for n in [1u64 << 32, u64::MAX] {
+            assert_eq!(
+                text(DOC, json!({ "address": "1", "depth": n, "threshold": n })),
+                printed(DOC, Some("1"), Some(usize::MAX), false, usize::MAX),
+                "{n}"
+            );
+        }
     }
 
     #[test]

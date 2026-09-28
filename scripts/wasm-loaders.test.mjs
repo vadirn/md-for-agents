@@ -66,3 +66,21 @@ test("mdread: bytes that are not UTF-8 throw the CLI's message", async () => {
     { message: "mdread: stream did not contain valid UTF-8" },
   );
 });
+
+test("mdread: Infinity and NaN throw instead of reading as omitted", async () => {
+  const mdread = await loadMdread(await wasm("mdread"));
+  for (const options of [{ threshold: Infinity }, { depth: NaN }, { depth: -Infinity }]) {
+    assert.throws(() => mdread.read("# A\n", { address: "1", ...options }), /^Error: mdread: invalid options: /);
+  }
+});
+
+test("mdread: null reads as omitted, and a bound past 32 bits reads as the CLI does", async () => {
+  const mdread = await loadMdread(await wasm("mdread"));
+  const page = `# A\n\n## Big\n\n${"word ".repeat(10_000)}\n`;
+  const all = mdread.read(page, { address: "1", threshold: 1e9 });
+  assert.notEqual(mdread.read(page, { address: "1" }), all, "the default folds Big");
+  assert.equal(mdread.read(page, { address: "1", full: null }), mdread.read(page, { address: "1" }));
+  for (const threshold of [2 ** 32, Number.MAX_SAFE_INTEGER]) {
+    assert.equal(mdread.read(page, { address: "1", threshold }), all);
+  }
+});

@@ -1,4 +1,4 @@
-/** The arguments `mdread -` takes after the file. An omitted option takes the CLI's default. */
+/** The arguments `mdread -` takes after the file. An omitted or null option takes the CLI's default; `depth` and `threshold` take non-negative integers. */
 export interface ReadOptions {
   /** A dotted-numeric path (`2.1`), a heading slug, `0` or `text`, `fm` or `fm.<path>`, or `links`. Omitted, the whole document folds to its heading tree. */
   address?: string;

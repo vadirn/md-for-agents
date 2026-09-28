@@ -8,6 +8,16 @@ const decoder = new TextDecoder();
 // more than this is replaced, so the next document does not carry its peak.
 const RETAINED_MEMORY = 64 * 2 ** 20;
 
+// JSON has no Infinity or NaN, and `JSON.stringify` writes them as null, which
+// the module reads as an omitted option. Refuse them rather than read with the
+// default the caller did not ask for.
+function finite(key, value) {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new Error(`mdread: invalid options: ${key} is ${value}, not a finite number`);
+  }
+  return value;
+}
+
 /**
  * Instantiate the module once, then call `read` per document.
  *
@@ -30,7 +40,7 @@ export async function load(source) {
    */
   function read(content, options = {}) {
     const bytes = typeof content === "string" ? encoder.encode(content) : content;
-    const flags = encoder.encode(JSON.stringify(options));
+    const flags = encoder.encode(JSON.stringify(options, finite));
     const { memory, alloc, dealloc, read_json } = instance.exports;
     let response;
     try {
