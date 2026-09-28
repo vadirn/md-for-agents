@@ -1,9 +1,11 @@
 //! The rendering layer: turn a [`Reading`] into what a terminal shows.
 //!
-//! All of this crate's output is written here, through [`cli::with_stdout`], so
-//! a reader that exits early stops the run rather than panicking it. The library
-//! builds values; this module is the only place that decides how they look,
-//! which is what lets a caller take the same data and render it its own way.
+//! All of this crate's output is written here. [`print`] goes through
+//! [`cli::with_stdout`], so a reader that exits early stops the run rather than
+//! panicking it; [`write_text`] writes the same text into any writer, such as a
+//! buffer a host reads back. The library builds values; this module is the only
+//! place that decides how they look, which is what lets a caller take the same
+//! data and render it its own way.
 
 use std::io::{self, Write};
 
@@ -30,17 +32,23 @@ pub fn print(reading: &Reading, format: TextJson) -> Result<()> {
         return Ok(());
     }
 
-    with_stdout(|out| match reading {
+    with_stdout(|out| write_text(out, reading))?;
+    Ok(())
+}
+
+/// Write one reading as text: the bytes [`print`] sends to stdout for
+/// [`TextJson::Text`].
+pub fn write_text(out: &mut impl Write, reading: &Reading) -> io::Result<()> {
+    match reading {
         Reading::Overview(o) => write_overview(out, o),
         Reading::Frontmatter(f) => write_frontmatter(out, f),
         Reading::FrontmatterValue(v) => write_frontmatter_value(out, v),
         Reading::Links(l) => write_links(out, l),
         Reading::Unfold(u) => write_unfold(out, u),
-    })?;
-    Ok(())
+    }
 }
 
-fn write_overview(out: &mut io::StdoutLock<'_>, o: &Overview) -> io::Result<()> {
+fn write_overview(out: &mut impl Write, o: &Overview) -> io::Result<()> {
     writeln!(out, "{}", o.path)?;
     if !o.fields.is_empty() {
         writeln!(out, "fields: {}", o.fields.join(", "))?;
@@ -77,7 +85,7 @@ fn write_overview(out: &mut io::StdoutLock<'_>, o: &Overview) -> io::Result<()> 
     Ok(())
 }
 
-fn write_tree(out: &mut io::StdoutLock<'_>, n: &TreeNode) -> io::Result<()> {
+fn write_tree(out: &mut impl Write, n: &TreeNode) -> io::Result<()> {
     writeln!(
         out,
         "{}",
@@ -96,7 +104,7 @@ fn write_tree(out: &mut io::StdoutLock<'_>, n: &TreeNode) -> io::Result<()> {
     Ok(())
 }
 
-fn write_frontmatter(out: &mut io::StdoutLock<'_>, f: &Frontmatter) -> io::Result<()> {
+fn write_frontmatter(out: &mut impl Write, f: &Frontmatter) -> io::Result<()> {
     writeln!(
         out,
         "{}  (frontmatter)   L{}   {} lines",
@@ -106,11 +114,11 @@ fn write_frontmatter(out: &mut io::StdoutLock<'_>, f: &Frontmatter) -> io::Resul
     writeln!(out, "{}", f.text)
 }
 
-fn write_frontmatter_value(out: &mut io::StdoutLock<'_>, v: &FrontmatterValue) -> io::Result<()> {
+fn write_frontmatter_value(out: &mut impl Write, v: &FrontmatterValue) -> io::Result<()> {
     writeln!(out, "{}", frontmatter::value_to_text(&v.value))
 }
 
-fn write_links(out: &mut io::StdoutLock<'_>, l: &Links) -> io::Result<()> {
+fn write_links(out: &mut impl Write, l: &Links) -> io::Result<()> {
     writeln!(out, "{}  (outgoing)   {} links", l.address, l.links.len())?;
     writeln!(out)?;
     for link in &l.links {
@@ -123,7 +131,7 @@ fn write_links(out: &mut io::StdoutLock<'_>, l: &Links) -> io::Result<()> {
     Ok(())
 }
 
-fn write_unfold(out: &mut io::StdoutLock<'_>, u: &Unfold) -> io::Result<()> {
+fn write_unfold(out: &mut impl Write, u: &Unfold) -> io::Result<()> {
     writeln!(
         out,
         "{}  {}   L{}   {} lines · ~{} tok",
