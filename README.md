@@ -69,12 +69,12 @@ const section = mdread.read(page, { address: "2.1", depth: 1 });
 
 The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string and these options. Each option the caller omits takes the CLI's default.
 
-| Option      | CLI equivalent       |
-| ----------- | -------------------- |
+| Option      | CLI equivalent |
+| ----------- | -------------- |
 | `address`   | the address argument |
-| `depth`     | `--depth`            |
-| `full`      | `--full`             |
-| `threshold` | `--threshold`        |
+| `depth`     | `--depth` |
+| `full`      | `--full` |
+| `threshold` | `--threshold` |
 
 `read` returns the text and throws where the CLI exits non-zero, with the message the CLI prints. The overview names the content `-`, as the CLI names stdin. A note the CLI prints on stderr beside a successful reading is not returned. The module reads with the CLI's default dialect, so `--strict-headings` and `--wikilinks-only` have no option.
 
