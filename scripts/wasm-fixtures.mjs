@@ -41,9 +41,11 @@ for (const file of (await readdir(fixtures)).filter((f) => f.endsWith(".md")).so
     try {
       text = mdread.read(content, options);
     } catch (e) {
+      // A trap is the module failing, not a reading the CLI rejects too.
+      if (!e.message.startsWith("mdread: ")) throw e;
       // The CLI prints the message on stderr and exits 1, with nothing on stdout.
       await writeFile(`${out}.stdout`, "");
-      await writeFile(`${out}.stderr`, `${e.message.replace(/^mdread: /, "")}\n`);
+      await writeFile(`${out}.stderr`, `${e.message.slice("mdread: ".length)}\n`);
       await writeFile(`${out}.exit`, "1\n");
       continue;
     }

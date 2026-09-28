@@ -78,6 +78,8 @@ The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` ta
 
 `read` returns the text and throws where the CLI exits non-zero, with the message the CLI prints. The overview names the content `-`, as the CLI names stdin. A note the CLI prints on stderr beside a successful reading is not returned. The module reads with the CLI's default dialect, so `--strict-headings` and `--wikilinks-only` have no option.
 
+The loader recovers from a trap as `mdstruct.mjs` does. A document nested deeper than the engine's stack allows throws the engine's error, and the next call runs in a fresh instance. An instance left holding more than 64 MiB is replaced too.
+
 Build the module:
 
 ```bash
@@ -92,7 +94,7 @@ It lands at `target/wasm32-unknown-unknown/wasm/mdread_wasm.wasm`. A host withou
 | `read_json(ptr, len) -> frame` | Reads the JSON request `{"content": ..., "address"?: ..., "depth"?: ..., "full"?: ..., "threshold"?: ...}`. The frame is a little-endian `u32` length, then that many bytes of `{"text": ...}` JSON. |
 | `dealloc(ptr, len)`            | Frees the request with its `len`, or a frame with 4 plus its length. |
 
-A request the CLI would exit non-zero on frames `{"error": ...}` instead of text. So does a request that is not JSON of that shape, or that names an unknown option.
+A request the CLI would exit non-zero on frames `{"error": ...}` instead of text. So does a request that is not JSON of that shape, or that names an unknown option. A trap leaves the instance unusable, so a host that keeps one instance across calls replaces it after one.
 
 ## mdstruct
 

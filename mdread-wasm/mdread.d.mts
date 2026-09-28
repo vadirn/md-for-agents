@@ -11,9 +11,9 @@ export interface ReadOptions {
 }
 
 export interface Mdread {
-  /** The text `mdread - [address]` prints for this content. Throws where the CLI exits non-zero, with the message it prints. */
+  /** The text `mdread - [address]` prints for this content. Throws where the CLI exits non-zero, with the message it prints, and throws the engine's error on a document nested deeper than its stack allows. */
   read(content: string, options?: ReadOptions): string;
 }
 
-/** Instantiate mdread.wasm once; the returned function reads in-process. */
+/** Instantiate mdread.wasm once; the returned function reads in-process, and replaces the instance after a trap. */
 export function load(source: BufferSource | WebAssembly.Module): Promise<Mdread>;
