@@ -67,7 +67,7 @@ const overview = mdread.read(page);
 const section = mdread.read(page, { address: "2.1", depth: 1 });
 ```
 
-The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string and these options. Each option the caller omits takes the CLI's default.
+The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string or UTF-8 bytes, and these options. Each option the caller omits takes the CLI's default.
 
 | Option      | CLI equivalent |
 | ----------- | -------------- |
@@ -76,7 +76,7 @@ The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` ta
 | `full`      | `--full` |
 | `threshold` | `--threshold` |
 
-`read` returns the text and throws where the CLI exits non-zero, with the message the CLI prints. The overview names the content `-`, as the CLI names stdin. A note the CLI prints on stderr beside a successful reading is not returned. The module reads with the CLI's default dialect, so `--strict-headings` and `--wikilinks-only` have no option.
+`read` returns the text and throws where the CLI exits non-zero, with the message the CLI prints. Bytes pass through as they are, as `mdread -` reads its stdin, so pass a file's bytes to keep its byte-order mark: `TextDecoder` drops it by default. The overview names the content `-`, as the CLI names stdin. A note the CLI prints on stderr beside a successful reading is not returned. The module reads with the CLI's default dialect, so `--strict-headings` and `--wikilinks-only` have no option.
 
 The loader recovers from a trap as `mdstruct.mjs` does. A document nested deeper than the engine's stack allows throws the engine's error, and the next call runs in a fresh instance. An instance left holding more than 64 MiB is replaced too.
 
@@ -88,13 +88,13 @@ cargo build --profile wasm --target wasm32-unknown-unknown -p mdread-wasm
 
 It lands at `target/wasm32-unknown-unknown/wasm/mdread_wasm.wasm`. A host without the loader calls three exports:
 
-| Export                         | Contract |
-| ------------------------------ | -------- |
-| `alloc(len) -> ptr`            | Reserves `len` bytes for the request. |
-| `read_json(ptr, len) -> frame` | Reads the JSON request `{"content": ..., "address"?: ..., "depth"?: ..., "full"?: ..., "threshold"?: ...}`. The frame is a little-endian `u32` length, then that many bytes of `{"text": ...}` JSON. |
-| `dealloc(ptr, len)`            | Frees the request with its `len`, or a frame with 4 plus its length. |
+| Export                                                           | Contract |
+| ---------------------------------------------------------------- | -------- |
+| `alloc(len) -> ptr`                                              | Reserves `len` bytes for the content or the options. |
+| `read_json(content, content_len, options, options_len) -> frame` | Reads the content as `mdread -` reads stdin, with the options `{"address"?: ..., "depth"?: ..., "full"?: ..., "threshold"?: ...}` as JSON. The frame is a little-endian `u32` length, then that many bytes of `{"text": ...}` JSON. |
+| `dealloc(ptr, len)`                                              | Frees a block with its `len`, or a frame with 4 plus its length. |
 
-A request the CLI would exit non-zero on frames `{"error": ...}` instead of text. So does a request that is not JSON of that shape, or that names an unknown option. A trap leaves the instance unusable, so a host that keeps one instance across calls replaces it after one.
+Where the CLI would exit non-zero, the frame holds `{"error": ...}` with the CLI's message instead of text. So do options that are not a JSON object of that shape, or that name an unknown option. A trap leaves the instance unusable, so a host that keeps one instance across calls replaces it after one.
 
 ## mdstruct
 

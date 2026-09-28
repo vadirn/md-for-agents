@@ -11,8 +11,8 @@ export interface ReadOptions {
 }
 
 export interface Mdread {
-  /** The text `mdread - [address]` prints for this content. Throws where the CLI exits non-zero, with the message it prints, and throws the engine's error on a document nested deeper than its stack allows. */
-  read(content: string, options?: ReadOptions): string;
+  /** The text `mdread - [address]` prints for this content. A string is encoded as UTF-8; bytes pass through as they are, as `mdread -` reads stdin. Throws where the CLI exits non-zero, with the message it prints, and throws the engine's error on a document nested deeper than its stack allows. */
+  read(content: string | Uint8Array, options?: ReadOptions): string;
 }
 
 /** Instantiate mdread.wasm once; the returned function reads in-process, and replaces the instance after a trap. */

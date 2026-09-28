@@ -1,5 +1,6 @@
 // Checks what the JavaScript loaders do themselves, which the fixture
-// comparison cannot reach: recovery after the module traps.
+// comparison cannot reach: recovery after the module traps, and how a
+// JavaScript string crosses into the module.
 //
 //   node --test scripts/wasm-loaders.test.mjs   (after the wasm build)
 
@@ -42,4 +43,26 @@ test("mdread: a trap leaves the next call as a fresh module answers it", async (
   const fresh = await loadMdread(await wasm("mdread"));
   assert.throws(() => mdread.read(tooDeep, { address: "1" }), (e) => !e.message.startsWith("mdread:"));
   assert.equal(mdread.read("# A\n\nhello\n"), fresh.read("# A\n\nhello\n"));
+});
+
+test("mdread: a string reads as its UTF-8 bytes do", async () => {
+  const mdread = await loadMdread(await wasm("mdread"));
+  const page = await readFile(new URL("../mdread/tests/fixtures/rich.md", import.meta.url), "utf8");
+  for (const address of [undefined, "1", "links"]) {
+    assert.equal(mdread.read(page, { address }), mdread.read(new TextEncoder().encode(page), { address }));
+  }
+});
+
+test("mdread: half a surrogate pair reads as U+FFFD, as it reaches the CLI through a pipe", async () => {
+  const mdread = await loadMdread(await wasm("mdread"));
+  const cut = "# A\n\n" + "\u{1F600}".slice(0, 1) + "\n";
+  assert.equal(mdread.read(cut, { address: "1" }), mdread.read("# A\n\n\uFFFD\n", { address: "1" }));
+});
+
+test("mdread: bytes that are not UTF-8 throw the CLI's message", async () => {
+  const mdread = await loadMdread(await wasm("mdread"));
+  assert.throws(
+    () => mdread.read(new Uint8Array([0x23, 0x20, 0x41, 0x0a, 0xff, 0x0a])),
+    { message: "mdread: stream did not contain valid UTF-8" },
+  );
 });

@@ -33,13 +33,11 @@ for (const file of (await readdir(fixtures)).filter((f) => f.endsWith(".md")).so
   const bytes = new Uint8Array(await readFile(join(fixtures, file)));
   await writeFile(join(output, `${name}.mdstruct.stdout`), `${mdstruct.parseJson(bytes)}\n`);
 
-  // `mdread -` keeps a leading BOM in the text it reads, so the decoder must too.
-  const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   for (const { label, options } of cases) {
     const out = join(output, `${name}.mdread-${label}`);
     let text;
     try {
-      text = mdread.read(content, options);
+      text = mdread.read(bytes, options);
     } catch (e) {
       // A trap is the module failing, not a reading the CLI rejects too.
       if (!e.message.startsWith("mdread: ")) throw e;
