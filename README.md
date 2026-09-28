@@ -121,6 +121,8 @@ const doc = mdstruct.parse("# Title\n\nSee [[Page]].\n");
 
 The loader, `mdstruct-wasm/mdstruct.mjs`, runs in Bun, Node, and browsers. `parse` returns the document, and `parseJson` returns its JSON text. Both take a string or UTF-8 bytes, and both throw on bytes that are not UTF-8.
 
+An input nested deeper than the engine's stack allows traps the module. The loader throws the engine's error and replaces the instance, so the next call is unaffected. Because wasm memory never shrinks, the loader also replaces an instance that one large document left holding more than 64 MiB. The module reserves the CLI's 8 MiB stack, so Bun reads nesting about as deep as the CLI does; Node's own stack stops sooner.
+
 Build the module:
 
 ```bash
@@ -135,7 +137,7 @@ It lands at `target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm`. A host with
 | `parse_json(ptr, len) -> frame` | Parses the input as `mdstruct -` does. The frame is a little-endian `u32` length, then that many bytes of JSON. |
 | `dealloc(ptr, len)`             | Frees the input with its `len`, or a frame with 4 plus its length. |
 
-Bytes that are not UTF-8 frame `{"error":"..."}` instead of a document.
+Bytes that are not UTF-8 frame `{"error":"..."}` instead of a document. A trap leaves the instance unusable, so a host that keeps one instance across calls replaces it after one.
 
 ## mdformat
 
