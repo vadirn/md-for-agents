@@ -159,7 +159,7 @@ mdformat/       block-level passthrough printer
 mdsearch/       BM25 search over a folder
 ```
 
-`cli` is a library with no binary, and `mdstruct-wasm` ships a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` library builds without clap when its `cli` feature is off, which is how its dependents take it.
+`cli` is a library with no binary, and `mdstruct-wasm` ships a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` and `mdread` libraries build without clap when their `cli` feature is off, which is how their dependents take them.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 
