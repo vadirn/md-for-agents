@@ -1,6 +1,6 @@
 //! The rendering layer: turn a [`Reading`] into what a terminal shows.
 //!
-//! All of this crate's output is written here. [`print`] goes through
+//! All of this crate's output is written here. [`print()`] goes through
 //! [`cli::with_stdout`], so a reader that exits early stops the run rather than
 //! panicking it; [`write_text`] writes the same text into any writer, such as a
 //! buffer a host reads back. The library builds values; this module is the only
@@ -36,7 +36,7 @@ pub fn print(reading: &Reading, format: TextJson) -> Result<()> {
     Ok(())
 }
 
-/// Write one reading as text: the bytes [`print`] sends to stdout for
+/// Write one reading as text: the bytes [`print()`] sends to stdout for
 /// [`TextJson::Text`].
 pub fn write_text(out: &mut impl Write, reading: &Reading) -> io::Result<()> {
     match reading {
