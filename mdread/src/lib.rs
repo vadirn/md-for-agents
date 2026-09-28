@@ -8,8 +8,8 @@
 //! [`read_content`] resolve an address to a [`Reading`] and return it;
 //! [`render::print`] is the only thing that turns one into terminal output. A
 //! caller that wants the data takes the value and never goes through stdout,
-//! and the fold threshold arrives as a parameter, so the defaults belong to
-//! whichever binary sets them.
+//! and the fold threshold arrives as a parameter. [`DEFAULT_THRESHOLD`] is the
+//! one mdread's own front ends pass; another caller sets its own.
 
 mod facet;
 mod frontmatter;
@@ -39,6 +39,11 @@ use model::{Document, Node, node_tokens, parse_document_with, range_lines, range
 use resolve::resolve_address;
 use shadow::{FmAddress, Reserved, reserved_reading};
 use unfold::{own_prose, unfold_child, unfold_content_string};
+
+/// The inline cutoff, in estimated tokens, that the `mdread` binary applies
+/// unless `--threshold` says otherwise, and `mdread.wasm` unless its options
+/// name one. A child above it folds to a placeholder line instead of inlining.
+pub const DEFAULT_THRESHOLD: usize = 2000;
 
 /// The Markdown flavour a caller reads in: the two places where a defensible
 /// reading of the same bytes differs. [`Default`] is plain CommonMark; a caller

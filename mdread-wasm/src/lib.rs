@@ -14,13 +14,10 @@
 //! Only the wasm32 build exports the functions. Natively they stay plain Rust, so
 //! the tests below exercise the contract without a WebAssembly runtime.
 
-use mdread::{Dialect, read_content, render};
+use mdread::{DEFAULT_THRESHOLD, Dialect, read_content, render};
 use serde::{Deserialize, Serialize};
 
 wasm_abi::exports!();
-
-/// The `mdread` binary's inline cutoff when `--threshold` is absent.
-const DEFAULT_THRESHOLD: usize = 2000;
 
 /// The arguments after `mdread -`. An omitted option takes the CLI's default,
 /// and an unknown one is an error rather than an option silently ignored.
