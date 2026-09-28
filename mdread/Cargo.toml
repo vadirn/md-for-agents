@@ -16,6 +16,11 @@ name = "mdread"
 path = "src/main.rs"
 required-features = ["cli"]
 
+# The golden corpus runs the binary, so it builds only when the binary does.
+[[test]]
+name = "golden"
+required-features = ["cli"]
+
 [dependencies]
 cli.workspace = true
 mdstruct.workspace = true
