@@ -1,0 +1,17 @@
+# Each line names a case, then the arguments `mdread -` takes after it.
+# release-fixtures.sh runs the binary with them over every fixture, and
+# wasm-fixtures.mjs passes the same options to mdread.wasm, so the outputs diff.
+# Some cases fail on some fixtures by design: the error is compared too.
+overview
+0                    0
+fm                   fm
+fm.tags              fm.tags
+links                links
+1                    1
+1.1                  1.1
+2                    2
+background           background
+1-depth-1            1 --depth 1
+1-threshold-10       1 --threshold 10
+1-threshold-10-full  1 --threshold 10 --full
+99                   99

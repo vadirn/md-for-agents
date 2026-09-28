@@ -55,6 +55,45 @@ mdread notes.md 2.1 --depth 1 # one subtree, one level deep
 mdread notes.md --format json # the same shape, machine-readable
 ```
 
+## mdread in WebAssembly
+
+`mdread-wasm` compiles the reader to a WebAssembly module with no imports. A JavaScript host loads it once and reads in-process. For the same content and options, the text is byte-identical to what `mdread - [address]` prints.
+
+```js
+import { load } from "./mdread.mjs";
+
+const mdread = await load(await Bun.file("mdread.wasm").arrayBuffer());
+const overview = mdread.read(page);
+const section = mdread.read(page, { address: "2.1", depth: 1 });
+```
+
+The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string and these options. Each option the caller omits takes the CLI's default.
+
+| Option      | CLI equivalent       |
+| ----------- | -------------------- |
+| `address`   | the address argument |
+| `depth`     | `--depth`            |
+| `full`      | `--full`             |
+| `threshold` | `--threshold`        |
+
+`read` returns the text and throws where the CLI exits non-zero, with the message the CLI prints. The overview names the content `-`, as the CLI names stdin. A note the CLI prints on stderr beside a successful reading is not returned. The module reads with the CLI's default dialect, so `--strict-headings` and `--wikilinks-only` have no option.
+
+Build the module:
+
+```bash
+cargo build --profile wasm --target wasm32-unknown-unknown -p mdread-wasm
+```
+
+It lands at `target/wasm32-unknown-unknown/wasm/mdread_wasm.wasm`. A host without the loader calls three exports:
+
+| Export                         | Contract |
+| ------------------------------ | -------- |
+| `alloc(len) -> ptr`            | Reserves `len` bytes for the request. |
+| `read_json(ptr, len) -> frame` | Reads the JSON request `{"content": ..., "address"?: ..., "depth"?: ..., "full"?: ..., "threshold"?: ...}`. The frame is a little-endian `u32` length, then that many bytes of `{"text": ...}` JSON. |
+| `dealloc(ptr, len)`            | Frees the request with its `len`, or a frame with 4 plus its length. |
+
+A request the CLI would exit non-zero on frames `{"error": ...}` instead of text. So does a request that is not JSON of that shape, or that names an unknown option.
+
 ## mdstruct
 
 `mdstruct` parses to NDJSON on stdout. Every span in that model is a pair of byte offsets into the original input. `mdstruct` never restringifies your source, so a consumer slices its own bytes and recovers the original exactly.
@@ -155,11 +194,12 @@ cli/            command-line concerns the tools share: format flag, token estima
 mdstruct/       the parsing core; mdread, mdformat, and mdstruct-wasm depend on it
 mdstruct-wasm/  mdstruct as a WebAssembly module, with its JavaScript loader
 mdread/         progressive-unfolding reader
+mdread-wasm/    mdread as a WebAssembly module, with its JavaScript loader
 mdformat/       block-level passthrough printer
 mdsearch/       BM25 search over a folder
 ```
 
-`cli` is a library with no binary, and `mdstruct-wasm` ships a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` and `mdread` libraries build without clap when their `cli` feature is off, which is how their dependents take them.
+`cli` is a library with no binary, and `mdstruct-wasm` and `mdread-wasm` each ship a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` and `mdread` libraries build without clap when their `cli` feature is off, which is how their dependents take them.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 
@@ -195,12 +235,13 @@ Both must pass before a change lands.
 
 The `musl tools` workflow checks every main-branch push, pull request, and manual run. It builds `mdstruct` and `mdread` with Rust 1.91.1 on a native arm64 Linux runner, tests the musl build, and runs both tools inside plain Alpine 3.22.6. The release gate compares fixture output byte-for-byte with the macOS build.
 
-The same workflow builds `mdstruct.wasm` with Rust 1.91.1. It runs the fixtures through the module in Node and compares that output byte-for-byte with the macOS build too.
+The same workflow builds `mdstruct.wasm` and `mdread.wasm` with Rust 1.91.1. It runs the fixtures through both modules in Node and compares that output byte-for-byte with the macOS build too. `mdread.wasm` reads each fixture with every case in `scripts/mdread-cases.txt`, and a failing case compares its error message.
 
 After those checks pass, pushing a `v*` tag publishes the same tested files:
 
 - the musl binaries, and `md-tools-aarch64-unknown-linux-musl.tar.gz`, which holds `usr/local/bin/mdstruct` and `usr/local/bin/mdread` for rootfs assembly
 - `mdstruct.wasm`, with its loader `mdstruct.mjs` and types `mdstruct.d.mts`
+- `mdread.wasm`, with its loader `mdread.mjs` and types `mdread.d.mts`
 - `SHA256SUMS` and `SOURCE_REVISION`
 
 Pin both the release URL and the SHA-256 of each asset you consume. Branch and manual runs upload CI artifacts without creating a release.

@@ -2,7 +2,7 @@
 # so two members cannot drift onto different versions of the same crate.
 [workspace]
 resolver = "3"
-members = ["cli", "mdstruct", "mdstruct-wasm", "mdread", "mdformat", "mdsearch"]
+members = ["cli", "mdstruct", "mdstruct-wasm", "mdread", "mdread-wasm", "mdformat", "mdsearch"]
 
 [workspace.package]
 version = "0.3.0"
@@ -12,8 +12,10 @@ repository = "https://github.com/vadirn/md-for-agents"
 
 [workspace.dependencies]
 cli = { path = "cli" }
-# Members use the parser, not mdstruct's own CLI, so they leave its `cli` feature off.
+# Members use the libraries, not mdstruct's or mdread's own CLI, so they leave
+# each `cli` feature off.
 mdstruct = { path = "mdstruct", default-features = false }
+mdread = { path = "mdread", default-features = false }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
@@ -28,7 +30,7 @@ serde_yaml = "0.9"
 unicode-width = { version = "0.2", default-features = false }
 
 # The WebAssembly build trades speed for size, since a host downloads the module:
-# cargo build --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
+# cargo build --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm -p mdread-wasm
 [profile.wasm]
 inherits = "release"
 opt-level = "s"

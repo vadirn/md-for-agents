@@ -703,6 +703,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdread-wasm"
+version = "0.3.0"
+dependencies = [
+ "mdread",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mdsearch"
 version = "0.3.0"
 dependencies = [

@@ -85,22 +85,32 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target wasm32-unknown-unknown
-      - run: cargo +"$RUST_TOOLCHAIN" build --locked --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm -p mdread-wasm
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-output
           path: macos-output
-      - name: Run the fixtures through the module and compare macOS output
+      - name: Run the fixtures through the modules and compare macOS output
         run: |
-          node scripts/wasm-fixtures.mjs target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm wasm-output
-          for expected in macos-output/*.mdstruct.stdout; do
+          node scripts/wasm-fixtures.mjs \
+            target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm \
+            target/wasm32-unknown-unknown/wasm/mdread_wasm.wasm \
+            wasm-output
+          for expected in macos-output/*.mdstruct.stdout macos-output/*.mdread-*.stdout macos-output/*.mdread-*.exit; do
             cmp "$expected" "wasm-output/$(basename "$expected")"
           done
-      - name: Assemble the module and its loader
+          # A failed reading's message is the CLI's stderr. A note beside a
+          # successful one stays on the CLI's stderr, so only failures compare.
+          for actual in wasm-output/*.mdread-*.stderr; do
+            cmp "macos-output/$(basename "$actual")" "$actual"
+          done
+      - name: Assemble the modules and their loaders
         run: |
           mkdir dist
-          cp target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm dist/mdstruct.wasm
-          cp mdstruct-wasm/mdstruct.mjs mdstruct-wasm/mdstruct.d.mts dist/
+          for tool in mdstruct mdread; do
+            cp "target/wasm32-unknown-unknown/wasm/${tool}_wasm.wasm" "dist/$tool.wasm"
+            cp "$tool-wasm/$tool.mjs" "$tool-wasm/$tool.d.mts" dist/
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wasm
@@ -122,8 +132,8 @@ jobs:
         with:
           name: wasm
           path: dist
-      - name: Add the module's checksums
-        run: (cd dist && sha256sum mdstruct.wasm mdstruct.mjs mdstruct.d.mts >> SHA256SUMS)
+      - name: Add the modules' checksums
+        run: (cd dist && sha256sum mdstruct.wasm mdstruct.mjs mdstruct.d.mts mdread.wasm mdread.mjs mdread.d.mts >> SHA256SUMS)
       - name: Publish verified tag assets
         env:
           GH_TOKEN: ${{ github.token }}
