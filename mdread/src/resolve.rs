@@ -10,7 +10,14 @@ use crate::model::{Document, Node, flatten, is_numeric_address};
 #[derive(Debug)]
 pub(crate) enum ResolveError {
     NoTextRegion(String),
-    OutOfRange(String),
+    /// A dotted-numeric address that runs past the sections at one level.
+    OutOfRange {
+        address: String,
+        /// The section whose subsections the path ran past; `None` at the top level.
+        parent: Option<String>,
+        /// The addresses at that level, in order.
+        available: Vec<String>,
+    },
     NoSlugMatch(String),
     /// Holds the candidate `(address, heading)` pairs.
     Ambiguous(String, Vec<(String, String)>),
@@ -32,26 +39,26 @@ pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, 
     }
 
     if is_numeric_address(address) {
-        let mut parts: Vec<usize> = Vec::new();
-        for seg in address.split('.') {
-            // An all-digit segment can still overflow `usize`; treat overflow as
-            // out-of-range rather than panicking.
-            match seg.parse::<usize>() {
-                Ok(n) => parts.push(n),
-                Err(_) => return Err(ResolveError::OutOfRange(address.to_string())),
-            }
-        }
         let mut level: &[Node] = &doc.tree;
         let mut current: Option<&Node> = None;
-        for (depth, &idx) in parts.iter().enumerate() {
-            if idx == 0 || idx > level.len() {
-                return Err(ResolveError::OutOfRange(address.to_string()));
-            }
-            let node = &level[idx - 1];
+        for seg in address.split('.') {
+            // An all-digit segment can still overflow `usize`; treat overflow as
+            // out-of-range rather than panicking. Parsing as the walk descends
+            // pins the miss to the level where it happens.
+            let node = match seg.parse::<usize>() {
+                Ok(idx) if idx >= 1 => level.get(idx - 1),
+                _ => None,
+            };
+            let Some(node) = node else {
+                return Err(ResolveError::OutOfRange {
+                    address: address.to_string(),
+                    // The node's own address, so `01.9` names section 1.
+                    parent: current.map(|n| n.address.clone()),
+                    available: level.iter().map(|n| n.address.clone()).collect(),
+                });
+            };
             current = Some(node);
-            if depth + 1 < parts.len() {
-                level = &node.children;
-            }
+            level = &node.children;
         }
         return Ok(current.expect("numeric address yields a node"));
     }
@@ -88,8 +95,30 @@ pub(crate) fn resolve_address<'a>(doc: &'a Document, address: &str) -> Result<&'
             }
             Err(anyhow::anyhow!(msg))
         }
-        Err(ResolveError::OutOfRange(addr)) => {
-            Err(anyhow::anyhow!("Address '{}' out of range", addr))
+        Err(ResolveError::OutOfRange {
+            address,
+            parent,
+            available,
+        }) => {
+            // Name what the level holds, so the caller corrects the address
+            // without folding the file again.
+            let (owner, noun) = match &parent {
+                Some(p) => (format!("section {}", p), "subsection"),
+                None => ("this file".to_string(), "top-level section"),
+            };
+            let holds = match available.as_slice() {
+                [] => format!("no {}s", noun),
+                [only] => format!("1 {} ({})", noun, only),
+                [first, .., last] => {
+                    format!("{} {}s ({}–{})", available.len(), noun, first, last)
+                }
+            };
+            Err(anyhow::anyhow!(
+                "Address '{}' out of range; {} has {}",
+                address,
+                owner,
+                holds
+            ))
         }
         Err(ResolveError::NoSlugMatch(needle)) => {
             Err(anyhow::anyhow!("No heading matches slug '{}'", needle))

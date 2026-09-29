@@ -64,6 +64,12 @@ const CASES: &[Case] = &[
     ),
     ("rich_err_no_slug", &["fixtures/rich.md", "nope"]),
     ("rich_err_out_of_range", &["fixtures/rich.md", "99"]),
+    ("rich_err_past_subsections", &["fixtures/rich.md", "1.9"]),
+    (
+        "rich_err_past_one_subsection",
+        &["fixtures/rich.md", "1.1.5"],
+    ),
+    ("rich_err_no_subsections", &["fixtures/rich.md", "1.2.5"]),
     // --- nested-fm.md: sequences, mappings, a sequence of mappings ---
     ("fmdoc_overview", &["fixtures/nested-fm.md"]),
     ("fmdoc_fm", &["fixtures/nested-fm.md", "fm"]),
@@ -110,6 +116,8 @@ const CASES: &[Case] = &[
     ("nolede_links", &["fixtures/no-lede.md", "links"]),
     ("nolede_err_text", &["fixtures/no-lede.md", "text"]),
     ("nolede_err_0", &["fixtures/no-lede.md", "0"]),
+    // One top-level heading with every section under it, as on a wiki page.
+    ("nolede_err_out_of_range", &["fixtures/no-lede.md", "4.2"]),
     // --- collisions.md: headings slugging to Links, FM, Frontmatter, Text,
     //     in a file with neither a frontmatter block nor a lede, so the
     //     reserved addresses fail with a shadow clause ---
