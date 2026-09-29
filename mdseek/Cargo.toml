@@ -1,0 +1,29 @@
+[package]
+name = "mdseek"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Answer an agent's question about a folder of Markdown and code: BM25 over outline sections, an answered or no-answer verdict, and outline-first reads."
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "mdseek"
+path = "src/main.rs"
+
+[dependencies]
+cli.workspace = true
+mdsearch.workspace = true
+mdread.workspace = true
+outline.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ignore = "0.4"
+tantivy = { version = "0.26", default-features = false, features = ["stemmer"] }
+
+[dev-dependencies]
+tempfile = "3"

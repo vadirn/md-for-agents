@@ -1,0 +1,12 @@
+[package]
+name = "outline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Outline source code without a parser: definitions and their line ranges from braces (Rust, TypeScript), indentation (Python) and keyword pairs (Ruby)."
+
+[dependencies]
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -728,6 +728,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdseek"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "cli",
+ "ignore",
+ "mdread",
+ "mdsearch",
+ "outline",
+ "serde",
+ "serde_json",
+ "tantivy",
+ "tempfile",
+]
+
+[[package]]
 name = "mdstruct"
 version = "0.3.0"
 dependencies = [
@@ -824,6 +841,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "outline"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
