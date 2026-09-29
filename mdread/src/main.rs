@@ -1,9 +1,8 @@
 //! `mdread` CLI — fold a Markdown file to its heading tree, or unfold one
 //! addressed section.
 //!
-//! This binary is the preconfigured half: it holds the fold threshold the tool
-//! ships with, reads through the library, and prints what comes back. The
-//! library holds no default, so another caller sets its own.
+//! This binary is the preconfigured half: it applies the fold threshold the tool
+//! ships with, reads through the library, and prints what comes back.
 
 use std::io::Read as _;
 use std::path::PathBuf;
@@ -11,11 +10,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use mdread::{Dialect, HeadingRule, LinkRule, TextJson};
-
-/// Inline cutoff in estimated tokens, applied unless `--threshold` says
-/// otherwise. A child above it folds to a placeholder line instead of inlining.
-const DEFAULT_THRESHOLD: usize = 2000;
+use mdread::{DEFAULT_THRESHOLD, Dialect, HeadingRule, LinkRule, TextJson};
 
 #[derive(Parser)]
 #[command(

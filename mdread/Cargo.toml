@@ -6,15 +6,26 @@ license.workspace = true
 repository.workspace = true
 description = "Progressive-unfolding structured Markdown reader: fold a file to a heading tree, unfold one addressed section. A thin consumer of the mdstruct core."
 
+[features]
+default = ["cli"]
+# Only the binary parses arguments, so a library consumer can build without clap.
+cli = ["dep:clap"]
+
 [[bin]]
 name = "mdread"
 path = "src/main.rs"
+required-features = ["cli"]
+
+# The golden corpus runs the binary, so it builds only when the binary does.
+[[test]]
+name = "golden"
+required-features = ["cli"]
 
 [dependencies]
 cli.workspace = true
 mdstruct.workspace = true
 anyhow.workspace = true
-clap.workspace = true
+clap = { workspace = true, optional = true }
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
