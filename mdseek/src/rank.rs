@@ -171,6 +171,7 @@ const SCORING: Scoring = Scoring {
 pub struct Options {
     pub split_identifiers: bool,
     pub descriptions: bool,
+    pub scoring: Scoring,
 }
 
 impl Default for Options {
@@ -178,12 +179,14 @@ impl Default for Options {
         Options {
             split_identifiers: true,
             descriptions: true,
+            scoring: SCORING,
         }
     }
 }
 
 pub struct Index {
     corpus: Corpus,
+    scoring: Scoring,
     sections: Vec<Section>,
     tokens: Vec<HashSet<String>>,
 }
@@ -224,6 +227,7 @@ impl Index {
         let corpus = Corpus::build(&docs)?;
         Ok(Index {
             corpus,
+            scoring: options.scoring,
             sections,
             tokens,
         })
@@ -242,7 +246,7 @@ impl Index {
         };
         let mut hits: Vec<Ranked> = self
             .corpus
-            .search(query, limit.max(POOL * 3), SCORING)?
+            .search(query, limit.max(POOL * 3), self.scoring)?
             .into_iter()
             .filter_map(|h| {
                 let section: usize = h.id.parse().ok()?;

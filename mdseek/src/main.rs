@@ -106,6 +106,7 @@ fn search(args: &SearchArgs, out: &mut impl std::io::Write) -> Result<()> {
     let options = rank::Options {
         split_identifiers: !args.no_split,
         descriptions: !args.no_descriptions,
+        ..rank::Options::default()
     };
     let index = rank::Index::build(sections::sections(&files), options)?;
     let outcome = index.search(&question, args.limit)?;

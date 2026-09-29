@@ -194,12 +194,27 @@ fn code(root: &Path, queries: &Path) -> Result<()> {
         .filter(|l| !l.trim().is_empty())
         .map(serde_json::from_str)
         .collect::<Result<_, _>>()?;
+    let title: f32 = std::env::var("TITLE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1.0);
+    let scoring = mdsearch::Scoring {
+        title,
+        description: 0.5,
+    };
     for (name, options) in [
-        ("split identifiers", Options::default()),
+        (
+            "split identifiers",
+            Options {
+                scoring,
+                ..Options::default()
+            },
+        ),
         (
             "unsplit",
             Options {
                 split_identifiers: false,
+                scoring,
                 ..Options::default()
             },
         ),
