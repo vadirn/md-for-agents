@@ -174,6 +174,9 @@ const CASES: &[Case] = &[
         &["fixtures/dialects.md", "text", "--strict-headings"],
     ),
     ("dialect_err_text", &["fixtures/dialects.md", "text"]),
+    // --- no-headings.md: prose only, so the tree is empty ---
+    ("bare_overview", &["fixtures/no-headings.md"]),
+    ("bare_err_out_of_range", &["fixtures/no-headings.md", "1"]),
     // --- the CLI surface itself, clap's parse errors included ---
     ("cli_err_missing_file", &["fixtures/does-not-exist.md"]),
     (

@@ -72,6 +72,8 @@ dialect_num_1	mdread fixtures/dialects.md 1
 dialect_num_1_strict	mdread fixtures/dialects.md 1 --strict-headings
 dialect_text_strict	mdread fixtures/dialects.md text --strict-headings
 dialect_err_text	mdread fixtures/dialects.md text
+bare_overview	mdread fixtures/no-headings.md
+bare_err_out_of_range	mdread fixtures/no-headings.md 1
 cli_err_missing_file	mdread fixtures/does-not-exist.md
 cli_err_bad_format	mdread fixtures/rich.md --format yaml
 cli_err_bad_depth	mdread fixtures/rich.md 1 --depth abc
