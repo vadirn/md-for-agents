@@ -135,6 +135,8 @@ const CASES: &[Case] = &[
     ("collide_err_fm", &["fixtures/collisions.md", "fm"]),
     ("collide_err_text", &["fixtures/collisions.md", "text"]),
     ("collide_err_0", &["fixtures/collisions.md", "0"]),
+    // One top-level section, so a top-level miss suggests the path under it.
+    ("collide_err_under_root", &["fixtures/collisions.md", "4"]),
     // --- collisions-order.md: `## Frontmatter` sits BEFORE `## FM`, so the two
     //     spellings of one reading appear in the opposite document order from
     //     collisions.md. Pins which of them the overview footer lists first, and

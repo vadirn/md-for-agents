@@ -467,6 +467,33 @@ mod tests {
     }
 
     #[test]
+    fn out_of_range_suggests_the_address_under_a_lone_top_level_section() {
+        let wiki = parse_document("# Title\n\n## A\n\n## B\n\n### B one\n\nbody\n");
+        assert_eq!(
+            miss(&wiki, "2.1"),
+            "Address '2.1' out of range; this file has 1 top-level section (1); did you mean '1.2.1'"
+        );
+        // No suggestion when the prefixed path misses too.
+        assert_eq!(
+            miss(&wiki, "4.2"),
+            "Address '4.2' out of range; this file has 1 top-level section (1)"
+        );
+    }
+
+    #[test]
+    fn out_of_range_names_a_heading_the_address_spells() {
+        let log = parse_document("# Changelog\n\n## 2024\n\nyear.\n\n## 1.2.0\n\nrelease.\n");
+        assert_eq!(
+            miss(&log, "2024"),
+            "Address '2024' out of range; this file has 1 top-level section (1); heading '2024' (1.1) also answers to '2024'"
+        );
+        assert_eq!(
+            miss(&log, "1.2.0"),
+            "Address '1.2.0' out of range; section 1.2 has no subsections; heading '1.2.0' (1.2) also answers to '1-2-0'"
+        );
+    }
+
+    #[test]
     fn no_slug_match_errors() {
         let doc = parse_document(SAMPLE);
         assert!(matches!(

@@ -49,7 +49,7 @@ An address is any of these:
 
 The reserved names win a collision. A `## Links` section is served by its numeric address instead, and the reader says so when the two collide.
 
-A dotted-numeric path that runs past the tree fails, and the error names the addresses that exist where it stops.
+A dotted-numeric address that misses fails with how many sections exist at the level where it stops, and their range. Under a lone top-level section, the error also suggests the full address. It names any heading whose slug the address spells.
 
 ```bash
 mdread notes.md fm.title      # one frontmatter value

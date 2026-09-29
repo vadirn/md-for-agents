@@ -56,6 +56,7 @@ collide_num_1_1	mdread fixtures/collisions.md 1.1
 collide_err_fm	mdread fixtures/collisions.md fm
 collide_err_text	mdread fixtures/collisions.md text
 collide_err_0	mdread fixtures/collisions.md 0
+collide_err_under_root	mdread fixtures/collisions.md 4
 order_overview	mdread fixtures/collisions-order.md
 order_fm	mdread fixtures/collisions-order.md fm
 order_frontmatter	mdread fixtures/collisions-order.md frontmatter
