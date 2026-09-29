@@ -3,3 +3,4 @@
 .direnv
 .DS_Store
 .vault.config.json
+/bench/results/

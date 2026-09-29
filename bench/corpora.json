@@ -1,0 +1,40 @@
+{
+  "root": "/Users/vadim/.cache/mdagents-bench/corpora",
+  "corpora": {
+    "rust": {
+      "dir": "md-for-agents",
+      "git": "15d21f4fc4134ec91c789adc97b9eac116f2d4c4",
+      "source": "/Users/vadim/Documents/md-for-agents",
+      "desc": "the Rust source of md-for-agents, a workspace of Markdown tools",
+      "unit": "code"
+    },
+    "ts": {
+      "dir": "writer-harness",
+      "git": "daa027eebd7dd71997ce52b5dbf34144f094ebe7",
+      "source": "/Users/vadim/Documents/writer-harness",
+      "desc": "the TypeScript source of writer-harness, an npm workspace with an SDK package and a web app",
+      "unit": "code"
+    },
+    "py": {
+      "dir": "requests",
+      "git": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "source": "https://github.com/psf/requests.git",
+      "desc": "the Python HTTP library requests",
+      "unit": "code"
+    },
+    "rb": {
+      "dir": "rack",
+      "git": "a9833c8f3bd6b6d1e0ab35de00a1f1a16b5095f5",
+      "source": "https://github.com/rack/rack.git",
+      "desc": "the Ruby library rack, the interface between Ruby web servers and applications",
+      "unit": "code"
+    },
+    "md": {
+      "dir": "vault",
+      "tree_sha256": "d28e4e91c6d2a2c89a38a884b4473867da461c578d75dfbd906ad49f5852472c",
+      "source": "~/Documents/vault, Markdown only, without dot folders, templates/, 41 projects/toggl/ and the root PERSONAL.md, CLAUDE.md and AGENTS.md, copied 2026-09-29",
+      "desc": "a personal knowledge vault of Markdown notes",
+      "unit": "markdown"
+    }
+  }
+}
