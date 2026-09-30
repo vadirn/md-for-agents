@@ -1,7 +1,8 @@
 //! `mdseek` — answer an agent's question about a folder of Markdown and code.
 //!
 //! `mdseek <folder> <question>` ranks outline sections with BM25 and prints
-//! `answered` or `no-answer`, then the candidates with their line ranges.
+//! `answered` or `no-answer`, then the files they sit in, each with the
+//! matching sections' line ranges as hints.
 //! `mdseek read <file> [address]` folds a file to its outline or unfolds one
 //! part. `mdseek usage` prints the text an agent's prompt carries.
 
@@ -11,17 +12,20 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use mdseek::{rank, read, render, sections};
 
-/// Candidates one search prints unless `--limit` says otherwise.
+/// Files one search prints unless `--limit` says otherwise.
 const DEFAULT_LIMIT: usize = 6;
+
+/// Sections a search ranks before grouping them by file.
+const SCAN: usize = 50;
 
 /// What an agent's prompt says about the tool. It names the wrapper as
 /// `<seek>`, because the prompt gives its path.
 const USAGE: &str = "\
-Start with `<seek> <folder> \"<question>\"`, passing the question as you were given it. It ranks every definition and note section in the folder by BM25.
+Start with `<seek> <folder> \"<question>\"`, passing the question as you were given it. It finds the files that answer it, ranked by BM25 over their definitions and note sections.
 
-It prints `answered` or `no-answer`, then candidates as `<path>:<first>-<last>`, the best two with their text. Each range is the whole definition or section, so cite it as printed; you need not open the file. On `no-answer`, search once more with a few suggested terms added, then fall back to rg.
+It prints `answered` or `no-answer`, then up to 6 files, best first. Under each file are the `<first>-<last>` ranges of its best-matching definitions or sections, and the best range's text is inline. The file is the finding and the ranges are hints. When the inline text answers, cite `<path>:<first>-<last>` as printed. Otherwise pinpoint the block in the file with `<seek> read <file>` or rg. On `no-answer`, search once more with a few suggested terms added, then fall back to rg.
 
-`<seek> read <file> [<first>-<last>]` prints a file's outline, or those lines.";
+`<seek> read <file>` prints a file's outline, one line per definition or section with its range. `<seek> read <file> <first>-<last>` prints those lines.";
 
 #[derive(Parser)]
 #[command(
@@ -54,7 +58,7 @@ struct SearchArgs {
     folder: Option<PathBuf>,
     /// The question, in plain words
     question: Vec<String>,
-    /// Candidates to print
+    /// Files to print
     #[arg(short, long, default_value_t = DEFAULT_LIMIT)]
     limit: usize,
     /// Print JSON instead of text
@@ -116,11 +120,11 @@ fn search(args: &SearchArgs, out: &mut impl std::io::Write) -> Result<()> {
         ..rank::Options::default()
     };
     let index = rank::Index::build(sections::sections(&files), options)?;
-    let outcome = index.search(&question, args.limit)?;
+    let outcome = index.search(&question, SCAN.max(args.limit))?;
     if args.json {
-        render::json(out, &index, &outcome)?;
+        render::json(out, &index, &outcome, args.limit)?;
     } else {
-        render::text(out, &index, &outcome, &folder.to_string_lossy())?;
+        render::text(out, &index, &outcome, &folder.to_string_lossy(), args.limit)?;
     }
     Ok(())
 }

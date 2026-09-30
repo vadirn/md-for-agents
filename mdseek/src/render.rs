@@ -1,17 +1,45 @@
-//! Print an outcome for an agent: the verdict, then the candidates, with the
-//! best ones' text inline so the agent can answer without another read.
+//! Print an outcome for an agent: the verdict, then the files, best first,
+//! each with the ranges that matched as hints. The best range's text prints
+//! inline, so the agent can often answer without another read.
 
 use std::io::{self, Write};
 
 use serde_json::json;
 
-use crate::rank::{Index, Outcome};
+use crate::rank::{Index, Outcome, Ranked};
 use crate::sections::{Kind, Section};
 
-/// Lines of text inlined for each of the first candidates, best first.
-const INLINE: &[usize] = &[60, 20];
+/// Lines of text inlined for the best range.
+const INLINE: usize = 60;
 
-pub fn text(out: &mut impl Write, index: &Index, outcome: &Outcome, root: &str) -> io::Result<()> {
+/// Ranges hinted under each file.
+const HINTS: usize = 3;
+
+/// The hits grouped by file, best file first: a file ranks by its best range.
+fn by_file<'a>(sections: &[Section], hits: &'a [Ranked], files: usize) -> Vec<Vec<&'a Ranked>> {
+    let mut groups: Vec<Vec<&Ranked>> = Vec::new();
+    for hit in hits {
+        let path = &sections[hit.section].path;
+        match groups
+            .iter()
+            .position(|g| &sections[g[0].section].path == path)
+        {
+            Some(k) if groups[k].len() < HINTS => groups[k].push(hit),
+            Some(_) => {}
+            None if groups.len() < files => groups.push(vec![hit]),
+            None => {}
+        }
+    }
+    groups
+}
+
+pub fn text(
+    out: &mut impl Write,
+    index: &Index,
+    outcome: &Outcome,
+    root: &str,
+    files: usize,
+) -> io::Result<()> {
     let sections = index.sections();
     if outcome.answered {
         writeln!(out, "answered")?;
@@ -22,40 +50,45 @@ pub fn text(out: &mut impl Write, index: &Index, outcome: &Outcome, root: &str) 
         }
         writeln!(out)?;
     }
-    for (k, hit) in outcome.hits.iter().enumerate() {
-        let s = &sections[hit.section];
-        write!(
-            out,
-            "{}. {}:{}-{}  {}",
-            k + 1,
-            s.path,
-            s.start,
-            s.end,
-            s.label
-        )?;
-        if let Some(parent) = s.context.last() {
-            write!(out, "  (in {})", clip(parent, 60))?;
-        }
-        writeln!(out)?;
-        if let Some(&limit) = INLINE.get(k) {
-            excerpt(out, root, s, limit)?;
+    for (k, group) in by_file(sections, &outcome.hits, files).iter().enumerate() {
+        writeln!(out, "{}. {}", k + 1, sections[group[0].section].path)?;
+        for (j, hit) in group.iter().enumerate() {
+            let s = &sections[hit.section];
+            write!(out, "   {}-{}  {}", s.start, s.end, s.label)?;
+            if let Some(parent) = s.context.last() {
+                write!(out, "  (in {})", clip(parent, 60))?;
+            }
+            writeln!(out)?;
+            if k == 0 && j == 0 {
+                excerpt(out, root, s, INLINE)?;
+            }
         }
     }
     writeln!(
         out,
-        "Each range is the whole definition or section, so it can be cited as printed."
+        "The file is the finding and each range a hint. `read <file>` prints its outline."
     )?;
     Ok(())
 }
 
-pub fn json(out: &mut impl Write, index: &Index, outcome: &Outcome) -> io::Result<()> {
+pub fn json(
+    out: &mut impl Write,
+    index: &Index,
+    outcome: &Outcome,
+    files: usize,
+) -> io::Result<()> {
     let sections = index.sections();
-    let hits: Vec<_> = outcome
-        .hits
+    let files: Vec<_> = by_file(sections, &outcome.hits, files)
         .iter()
-        .map(|h| {
-            let s = &sections[h.section];
-            json!({"path": s.path, "start": s.start, "end": s.end, "label": s.label, "score": h.score})
+        .map(|group| {
+            let hits: Vec<_> = group
+                .iter()
+                .map(|h| {
+                    let s = &sections[h.section];
+                    json!({"start": s.start, "end": s.end, "label": s.label, "score": h.score})
+                })
+                .collect();
+            json!({"path": sections[group[0].section].path, "hits": hits})
         })
         .collect();
     let value = json!({
@@ -64,7 +97,7 @@ pub fn json(out: &mut impl Write, index: &Index, outcome: &Outcome) -> io::Resul
         "coverage": outcome.coverage,
         "elbow": outcome.elbow,
         "suggestions": outcome.suggestions,
-        "hits": hits,
+        "files": files,
     });
     writeln!(out, "{}", value)
 }
@@ -87,10 +120,10 @@ fn excerpt(out: &mut impl Write, root: &str, s: &Section, limit: usize) -> io::R
         } else {
             line
         };
-        writeln!(out, "   {:>width$}  {}", no + 1, clip(line, 160))?;
+        writeln!(out, "     {:>width$}  {}", no + 1, clip(line, 160))?;
     }
     if s.end > last {
-        writeln!(out, "   {:>width$}  … {} more lines", "", s.end - last)?;
+        writeln!(out, "     {:>width$}  … {} more lines", "", s.end - last)?;
     }
     Ok(())
 }
@@ -102,4 +135,40 @@ fn clip(text: &str, max: usize) -> String {
     let mut s: String = text.chars().take(max).collect();
     s.push('…');
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn section(path: &str) -> Section {
+        Section {
+            path: path.to_string(),
+            kind: Kind::Markdown,
+            start: 1,
+            end: 1,
+            label: String::new(),
+            context: Vec::new(),
+            description: String::new(),
+            text: String::new(),
+            test: false,
+        }
+    }
+
+    #[test]
+    fn files_rank_by_their_best_hit_and_cap_hints_and_files() {
+        let paths = ["a", "b", "a", "c", "a", "a", "b", "d"];
+        let sections: Vec<Section> = paths.iter().map(|p| section(p)).collect();
+        let hits: Vec<Ranked> = (0..paths.len())
+            .map(|k| Ranked {
+                section: k,
+                score: 10.0 - k as f32,
+            })
+            .collect();
+        let groups: Vec<Vec<usize>> = by_file(&sections, &hits, 3)
+            .iter()
+            .map(|g| g.iter().map(|h| h.section).collect())
+            .collect();
+        assert_eq!(groups, vec![vec![0, 2, 4], vec![1, 6], vec![3]]);
+    }
 }
