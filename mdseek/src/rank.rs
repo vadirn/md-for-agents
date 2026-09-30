@@ -9,8 +9,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
-use mdsearch::{Corpus, Doc, Scoring, analysis};
-use tantivy::Term;
+use mdsearch::{Corpus, Doc, Field, Scoring, analysis};
 
 use crate::sections::{Kind, Section, split_identifiers};
 
@@ -220,17 +219,16 @@ impl Index {
             .enumerate()
             .map(|(k, s)| to_doc(k, s, options))
             .collect();
-        let mut analyzer = analysis::bilingual_analyzer();
+        let corpus = Corpus::build(&docs)?;
         let tokens = docs
             .iter()
             .map(|d| {
                 let text = format!("{}\n{}", d.title, d.body);
-                analysis::query_terms(&mut analyzer, &text)
+                analysis::query_terms(corpus.analyzer(), &text)
                     .into_iter()
                     .collect()
             })
             .collect();
-        let corpus = Corpus::build(&docs)?;
         Ok(Index {
             corpus,
             scoring: options.scoring,
@@ -244,8 +242,8 @@ impl Index {
     }
 
     pub fn search(&self, question: &str, limit: usize) -> Result<Outcome> {
-        let mut analyzer = analysis::bilingual_analyzer();
-        let mut has_terms = |text: &str| !analysis::query_terms(&mut analyzer, text).is_empty();
+        let analyzer = self.corpus.analyzer();
+        let has_terms = |text: &str| !analysis::query_terms(analyzer, text).is_empty();
         let subject = subject_words(question);
         let query = if has_terms(&subject) {
             subject.as_str()
@@ -263,7 +261,7 @@ impl Index {
         };
         // The gate reads a fixed depth, so `limit` changes what prints, not the verdict.
         let depth = POOL * 3;
-        let found = self.corpus.search(query, limit.max(depth), self.scoring)?;
+        let found = self.corpus.rank(query, limit.max(depth), self.scoring)?;
         let gated = self.reweigh(&found[..found.len().min(depth)]);
         let mut hits = self.reweigh(&found);
         let terms = self.content_terms(question);
@@ -339,8 +337,8 @@ impl Index {
     }
 
     fn content_terms(&self, question: &str) -> BTreeSet<String> {
-        let mut analyzer = analysis::bilingual_analyzer();
-        analysis::query_terms(&mut analyzer, question)
+        let analyzer = self.corpus.analyzer();
+        analysis::query_terms(analyzer, question)
             .into_iter()
             .filter(|t| !STOP.contains(&t.as_str()))
             .collect()
@@ -355,13 +353,8 @@ impl Index {
     }
 
     fn suggest(&self, terms: &BTreeSet<String>, hits: &[Ranked]) -> Vec<String> {
-        let searcher = match self.corpus.index().reader() {
-            Ok(r) => r.searcher(),
-            Err(_) => return Vec::new(),
-        };
-        let body = self.corpus.fields().body;
-        let total = searcher.num_docs().max(1) as f32;
-        let mut analyzer = analysis::bilingual_analyzer();
+        let total = self.corpus.num_docs().max(1) as f32;
+        let analyzer = self.corpus.analyzer();
         let mut weight: HashMap<String, f32> = HashMap::new();
         let mut surface: HashMap<String, HashMap<String, usize>> = HashMap::new();
         for hit in hits.iter().take(5) {
@@ -372,10 +365,7 @@ impl Index {
                     continue;
                 }
                 let lower = word.to_lowercase();
-                let Some(stem) = analysis::query_terms(&mut analyzer, &lower)
-                    .into_iter()
-                    .next()
-                else {
+                let Some(stem) = analysis::query_terms(analyzer, &lower).into_iter().next() else {
                     continue;
                 };
                 if terms.contains(&stem) || STOP.contains(&stem.as_str()) {
@@ -387,9 +377,7 @@ impl Index {
                     .entry(lower)
                     .or_default() += 1;
                 if seen.insert(stem.clone()) {
-                    let df = searcher
-                        .doc_freq(&Term::from_field_text(body, &stem))
-                        .unwrap_or(0) as f32;
+                    let df = self.corpus.doc_freq(Field::Body, &stem) as f32;
                     let idf = (total / (df + 1.0)).ln();
                     *weight.entry(stem).or_default() += idf.max(0.0);
                 }

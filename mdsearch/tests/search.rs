@@ -244,9 +244,9 @@ fn the_core_indexes_documents_a_caller_supplies() {
     assert_eq!(hits[0].id, "notes/Retrieval.md");
     assert!(!hits[0].snippet.highlights.is_empty());
 
-    // A caller with its own retrieval takes the index and queries it directly.
+    // A caller with its own retrieval reads the term statistics directly.
     assert_eq!(
-        corpus.index().reader().unwrap().searcher().num_docs(),
+        corpus.num_docs(),
         1,
         "the index is reachable without going through search()"
     );
