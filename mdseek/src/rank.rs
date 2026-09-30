@@ -59,9 +59,6 @@ const QUESTION_WORDS: &[&str] = &[
     "but",
     "by",
     "can",
-    "class",
-    "classes",
-    "code",
     "could",
     "definition",
     "defined",
@@ -71,13 +68,8 @@ const QUESTION_WORDS: &[&str] = &[
     "doing",
     "done",
     "each",
-    "file",
-    "files",
-    "find",
     "for",
     "from",
-    "function",
-    "functions",
     "had",
     "has",
     "have",
@@ -96,23 +88,16 @@ const QUESTION_WORDS: &[&str] = &[
     "its",
     "may",
     "me",
-    "method",
-    "methods",
     "might",
     "must",
     "my",
     "no",
     "not",
-    "note",
-    "notes",
     "of",
     "on",
     "onto",
     "or",
     "our",
-    "part",
-    "section",
-    "sections",
     "she",
     "should",
     "so",
@@ -147,6 +132,27 @@ const QUESTION_WORDS: &[&str] = &[
     "would",
     "you",
     "your",
+];
+
+/// Nouns a question may frame its target with ("which function", "the file
+/// that") or ask about ("uploaded files"). They stay in the query, but
+/// coverage skips them, because a framing word need not appear in the answer.
+const GENERIC: &[&str] = &[
+    "class",
+    "classes",
+    "code",
+    "file",
+    "files",
+    "find",
+    "function",
+    "functions",
+    "method",
+    "methods",
+    "note",
+    "notes",
+    "part",
+    "section",
+    "sections",
 ];
 
 /// The question without its [`QUESTION_WORDS`].
@@ -238,16 +244,72 @@ impl Index {
     }
 
     pub fn search(&self, question: &str, limit: usize) -> Result<Outcome> {
+        let mut analyzer = analysis::bilingual_analyzer();
+        let mut has_terms = |text: &str| !analysis::query_terms(&mut analyzer, text).is_empty();
         let subject = subject_words(question);
-        let query = if subject.trim().is_empty() {
+        let query = if has_terms(&subject) {
+            subject.as_str()
+        } else if has_terms(question) {
             question
         } else {
-            subject.as_str()
+            return Ok(Outcome {
+                answered: false,
+                reason: Some("no searchable terms"),
+                hits: Vec::new(),
+                coverage: 0.0,
+                elbow: None,
+                suggestions: Vec::new(),
+            });
         };
-        let mut hits: Vec<Ranked> = self
-            .corpus
-            .search(query, limit.max(POOL * 3), self.scoring)?
-            .into_iter()
+        // The gate reads a fixed depth, so `limit` changes what prints, not the verdict.
+        let depth = POOL * 3;
+        let found = self.corpus.search(query, limit.max(depth), self.scoring)?;
+        let gated = self.reweigh(&found[..found.len().min(depth)]);
+        let mut hits = self.reweigh(&found);
+        let terms = self.content_terms(question);
+        // Coverage counts what BM25 searched for, less the framing nouns
+        // unless nothing else is left.
+        let searched = self.content_terms(query);
+        let framed: BTreeSet<String> = searched
+            .difference(&self.content_terms(&GENERIC.join(" ")))
+            .cloned()
+            .collect();
+        let asked = if framed.is_empty() { searched } else { framed };
+        let coverage = gated
+            .iter()
+            .take(3)
+            .map(|h| coverage_of(&asked, &self.tokens[h.section]))
+            .fold(0.0f32, f32::max);
+        let elbow = elbow_of(&self.best_per_file(&gated));
+        let reason = if gated.is_empty() {
+            Some("nothing matched")
+        } else if coverage < COVERAGE {
+            Some("low coverage")
+        } else if elbow.is_some_and(|e| e < ELBOW) {
+            Some("no score elbow")
+        } else {
+            None
+        };
+        let suggestions = if reason.is_some() {
+            self.suggest(&terms, &gated)
+        } else {
+            Vec::new()
+        };
+        hits.truncate(limit);
+        Ok(Outcome {
+            answered: reason.is_none(),
+            reason,
+            hits,
+            coverage,
+            elbow,
+            suggestions,
+        })
+    }
+
+    /// BM25 hits with each test section's score scaled by [`TEST_WEIGHT`], best first.
+    fn reweigh(&self, found: &[mdsearch::Hit]) -> Vec<Ranked> {
+        let mut hits: Vec<Ranked> = found
+            .iter()
             .filter_map(|h| {
                 let section: usize = h.id.parse().ok()?;
                 let weight = if self.sections[section].test {
@@ -262,36 +324,7 @@ impl Index {
             })
             .collect();
         hits.sort_by(|a, b| b.score.total_cmp(&a.score));
-        let terms = self.content_terms(question);
-        let coverage = hits
-            .iter()
-            .take(3)
-            .map(|h| coverage_of(&terms, &self.tokens[h.section]))
-            .fold(0.0f32, f32::max);
-        let elbow = elbow_of(&self.best_per_file(&hits));
-        let reason = if hits.is_empty() {
-            Some("nothing matched")
-        } else if coverage < COVERAGE {
-            Some("low coverage")
-        } else if elbow.is_some_and(|e| e < ELBOW) {
-            Some("no score elbow")
-        } else {
-            None
-        };
-        let suggestions = if reason.is_some() {
-            self.suggest(&terms, &hits)
-        } else {
-            Vec::new()
-        };
-        hits.truncate(limit);
-        Ok(Outcome {
-            answered: reason.is_none(),
-            reason,
-            hits,
-            coverage,
-            elbow,
-            suggestions,
-        })
+        hits
     }
 
     /// The best hit of each file, up to [`POOL`] files. The elbow compares

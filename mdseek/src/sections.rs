@@ -190,8 +190,13 @@ impl CodeWalk<'_> {
             .collect();
         if !is_import(&node.label) && !is_docstring(&node.label) {
             let mut text = leading_comment(lines, node.start, self.lang);
+            // A kept child's leading comment is the child's, not the parent's.
+            let owned: Vec<(usize, usize)> = kept
+                .iter()
+                .map(|c| (comment_start(lines, c.start, self.lang), c.end))
+                .collect();
             for no in node.start..=node.end.min(lines.len()) {
-                if kept.iter().any(|c| c.start <= no && no <= c.end) {
+                if owned.iter().any(|&(first, last)| first <= no && no <= last) {
                     continue;
                 }
                 text.push_str(lines[no - 1]);
@@ -289,7 +294,13 @@ fn file_header(lines: &[&str], lang: Lang, nodes: &[outline::Node]) -> String {
             .collect::<Vec<_>>()
             .join("\n");
     }
-    let stop = nodes.first().map_or(lines.len(), |n| n.start - 1).min(MAX);
+    // A comment directly above a first definition describes that definition.
+    let stop = match nodes.first() {
+        Some(n) if !is_import(&n.label) => comment_start(lines, n.start, lang) - 1,
+        Some(n) => n.start - 1,
+        None => lines.len(),
+    }
+    .min(MAX);
     lines
         .iter()
         .take(stop)
@@ -354,10 +365,23 @@ fn is_import(label: &str) -> bool {
 /// The comment block directly above `start`: the words a writer chose to
 /// describe the definition, which a question in plain words most often shares.
 fn leading_comment(lines: &[&str], start: usize, lang: Lang) -> String {
+    let mut text = String::new();
+    for line in &lines[comment_start(lines, start, lang) - 1..start - 1] {
+        text.push_str(line);
+        text.push('\n');
+    }
+    text
+}
+
+/// The first line of the comment block directly above `start`, or `start`
+/// when none is there. Rust's `//!` documents the module, not the next item,
+/// so it ends the block.
+fn comment_start(lines: &[&str], start: usize, lang: Lang) -> usize {
     let mut first = start;
     while first > 1 && start - first < MAX_LEADING_COMMENT {
         let above = lines[first - 2].trim_start();
         let comment = match lang {
+            Lang::Rust if above.starts_with("//!") || above.starts_with("/*!") => false,
             Lang::Rust | Lang::TypeScript => {
                 above.starts_with("//")
                     || above.starts_with("/*")
@@ -371,12 +395,7 @@ fn leading_comment(lines: &[&str], start: usize, lang: Lang) -> String {
         }
         first -= 1;
     }
-    let mut text = String::new();
-    for line in &lines[first - 1..start - 1] {
-        text.push_str(line);
-        text.push('\n');
-    }
-    text
+    first
 }
 
 fn markdown_sections(file: &File, out: &mut Vec<Section>) {

@@ -128,14 +128,32 @@ fn nest(mut spans: Vec<(usize, usize)>, lines: &[&str]) -> Vec<Node> {
 
 /// The first line of `start..=end` that is neither a decorator nor an
 /// attribute, trimmed. Falls back to the first line.
+///
+/// A decorator or attribute runs until its brackets close, so the lines of a
+/// multi-line one are skipped too.
 fn label(lines: &[&str], start: usize, end: usize) -> String {
     let from = start.saturating_sub(1).min(lines.len());
     let to = (from + (end + 1).saturating_sub(start)).min(lines.len());
     let lines = &lines[from..to];
+    let mut open: i64 = 0;
     let pick = lines
         .iter()
         .map(|l| l.trim())
-        .find(|l| !l.is_empty() && !l.starts_with('@') && !l.starts_with("#["))
+        .find(|l| {
+            let decorating = open > 0 || l.starts_with('@') || l.starts_with("#[");
+            if decorating {
+                let balance: i64 = l
+                    .chars()
+                    .map(|c| match c {
+                        '(' | '[' | '{' => 1,
+                        ')' | ']' | '}' => -1,
+                        _ => 0,
+                    })
+                    .sum();
+                open = (open + balance).max(0);
+            }
+            !decorating && !l.is_empty()
+        })
         .or_else(|| lines.first().map(|l| l.trim()))
         .unwrap_or("");
     let mut label: String = pick.chars().take(120).collect();

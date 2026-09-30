@@ -109,7 +109,8 @@ pub(crate) fn outline(text: &str) -> Vec<Span> {
         .collect();
     bodies.sort_by_key(|b| b.0);
     for it in &mut top {
-        let head: Vec<char> = src[it.start - 1].chars().collect();
+        // The declaration line, past any decorators, names the container.
+        let head: Vec<char> = crate::label(&src, it.start, it.end).chars().collect();
         if !CONTAINER.iter().any(|w| has_word(&head, w)) {
             continue;
         }
@@ -265,6 +266,8 @@ fn lex(t: &[char]) -> Lexed {
         let c = t[i];
         if in_template {
             if c == '\\' {
+                // An escaped line break still ends a line.
+                line += usize::from(i + 1 < n && t[i + 1] == '\n');
                 i += 2;
                 continue;
             }
@@ -308,7 +311,12 @@ fn lex(t: &[char]) -> Lexed {
             note(&mut lines, line, Tok::Char(c), depth);
             i += 1;
             while i < n && t[i] != c && t[i] != '\n' {
-                i += if t[i] == '\\' { 2 } else { 1 };
+                if t[i] == '\\' {
+                    line += usize::from(i + 1 < n && t[i + 1] == '\n');
+                    i += 2;
+                } else {
+                    i += 1;
+                }
             }
             i += 1;
             prev = Prev::Tok(Tok::Char(c));

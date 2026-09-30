@@ -16,17 +16,24 @@ pub fn run(out: &mut impl Write, file: &Path, address: Option<&str>) -> Result<(
     let Some(kind) = kind_of(&name) else {
         bail!("no outliner for {}", name);
     };
-    if kind == Kind::Markdown && !address.is_some_and(is_range) {
-        let reading = mdread::read_file(
+    if kind == Kind::Markdown {
+        // mdread's addresses come first, so `2` is section 2. An address it
+        // cannot resolve prints as lines when it reads `<first>-<last>`.
+        match mdread::read_file(
             file,
             address,
             None,
             false,
             mdread::DEFAULT_THRESHOLD,
             mdread::Dialect::default(),
-        )?;
-        mdread::render::write_text(out, &reading)?;
-        return Ok(());
+        ) {
+            Ok(reading) => {
+                mdread::render::write_text(out, &reading)?;
+                return Ok(());
+            }
+            Err(_) if address.is_some_and(is_range) => {}
+            Err(e) => return Err(e),
+        }
     }
     let content = std::fs::read_to_string(file).with_context(|| format!("cannot read {}", name))?;
     match address {
@@ -39,15 +46,16 @@ pub fn run(out: &mut impl Write, file: &Path, address: Option<&str>) -> Result<(
             for node in outline::outline(lang, &content) {
                 tree(out, &node, 1)?;
             }
-            writeln!(out, "next: seek read {} <first>-<last>", name)?;
+            writeln!(out, "next: <first>-<last> prints those lines")?;
             Ok(())
         }
     }
 }
 
 fn is_range(address: &str) -> bool {
-    let (a, b) = address.split_once('-').unwrap_or((address, address));
-    a.parse::<usize>().is_ok() && b.parse::<usize>().is_ok()
+    address
+        .split_once('-')
+        .is_some_and(|(a, b)| a.parse::<usize>().is_ok() && b.parse::<usize>().is_ok())
 }
 
 fn tree(out: &mut impl Write, node: &outline::Node, depth: usize) -> Result<()> {

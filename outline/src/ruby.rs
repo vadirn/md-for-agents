@@ -303,6 +303,8 @@ fn skip_delimited(t: &[char], mut j: usize, open: char, interp: bool) -> (usize,
     while j < n {
         let ch = t[j];
         if ch == '\\' {
+            // An escaped line break still ends a line.
+            lines += usize::from(j + 1 < n && t[j + 1] == '\n');
             j += 2;
             continue;
         }

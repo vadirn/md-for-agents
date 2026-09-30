@@ -72,6 +72,13 @@ fn main() {
     let cli = Cli::parse();
     let result = cli::with_stdout(|out| match run(&cli, out) {
         Ok(()) => Ok(()),
+        // A reader that stopped early, such as `head`, is no failure.
+        Err(e)
+            if e.downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
         Err(e) => {
             eprintln!("{:#}", e);
             std::process::exit(1);
