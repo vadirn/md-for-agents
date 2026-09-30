@@ -1,0 +1,33 @@
+{
+  "root": "/Users/vadim/.cache/mdagents-bench/corpora",
+  "corpora": {
+    "panda": {
+      "dir": "panda",
+      "git": "552b01ca6742b1564dc00cb0058683acde17436b",
+      "source": "/Users/vadim/Documents/panda, a clone of https://github.com/chakra-ui/panda",
+      "desc": "the TypeScript monorepo of Panda CSS, a build-time CSS-in-JS engine with its compiler, extractor, generator and tooling packages",
+      "unit": "code"
+    },
+    "svelte": {
+      "dir": "svelte",
+      "git": "32348a5387ed8607e4bd688eddd3aa87c17abc21",
+      "source": "/Users/vadim/Documents/svelte, a clone of https://github.com/sveltejs/svelte",
+      "desc": "the JavaScript monorepo of Svelte, a UI framework with its compiler and client runtime",
+      "unit": "code"
+    },
+    "crux": {
+      "dir": "crux",
+      "git": "fa04fc11a8cf0b773caa23ce45b1821147c57aac",
+      "source": "/Users/vadim/Documents/crux",
+      "desc": "the TypeScript source of crux, a work-tracking service with an MCP server, a store and a web UI",
+      "unit": "code"
+    },
+    "md": {
+      "dir": "vault",
+      "tree_sha256": "d28e4e91c6d2a2c89a38a884b4473867da461c578d75dfbd906ad49f5852472c",
+      "source": "the vault snapshot the frozen bench pins, reused unchanged",
+      "desc": "a personal knowledge vault of Markdown notes",
+      "unit": "markdown"
+    }
+  }
+}

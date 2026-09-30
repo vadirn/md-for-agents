@@ -1,0 +1,8 @@
+#!/bin/sh
+# The benchmark's handle on the tool under test. The tool changes between
+# rounds; this wrapper does not. bench/results/ROUND names the current label,
+# so the tool's judge timings land beside that label's runs.
+bench=$(cd "$(dirname "$0")/.." && pwd)
+round=$(cat "$bench/results/ROUND" 2>/dev/null || echo scratch)
+mkdir -p "$bench/results/$round"
+MDSEEK_JUDGE_LOG="$bench/results/$round/judge.jsonl" exec "$bench/../target/release/mdseek" "$@"

@@ -1,0 +1,48 @@
+{"corpus": "panda", "path": "packages/core/src/style-encoder.ts", "name": "processConfigSlotRecipe", "kind": "method", "start": 169, "end": 191}
+{"corpus": "panda", "path": "packages/config/src/bundle-config.ts", "name": "bundleConfig", "kind": "function", "start": 22, "end": 43}
+{"corpus": "panda", "path": "packages/parser/src/project.ts", "name": "transformFile", "kind": "method", "start": 169, "end": 179}
+{"corpus": "panda", "path": "packages/token-dictionary/src/token.ts", "name": "clone", "kind": "method", "start": 155, "end": 164}
+{"corpus": "panda", "path": "packages/shared/src/merge-props.ts", "name": "mergeProps", "kind": "function", "start": 3, "end": 17}
+{"corpus": "panda", "path": "packages/core/src/import-map.ts", "name": "buildImportMap", "kind": "method", "start": 66, "end": 79}
+{"corpus": "panda", "path": "packages/generator/src/artifacts/js/cx.ts", "name": "generateCx", "kind": "function", "start": 3, "end": 29}
+{"corpus": "panda", "path": "packages/studio/src/components/colors.tsx", "name": "ColorGroup", "kind": "function", "start": 89, "end": 112}
+{"corpus": "panda", "path": "packages/shared/src/uniq.ts", "name": "uniq", "kind": "function", "start": 1, "end": 9}
+{"corpus": "panda", "path": "packages/core/src/selector.ts", "name": "extractParentSelectors", "kind": "function", "start": 7, "end": 28}
+{"corpus": "panda", "path": "packages/shared/src/traverse.ts", "name": "traverse", "kind": "function", "start": 25, "end": 64}
+{"corpus": "panda", "path": "packages/studio/src/components/icons.tsx", "name": "SizesIcon", "kind": "function", "start": 131, "end": 142}
+{"corpus": "svelte", "path": "packages/svelte/src/compiler/phases/3-transform/client/visitors/Fragment.js", "name": "join_template", "kind": "function", "start": 211, "end": 253}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/runtime.js", "name": "infinite_loop_guard", "kind": "function", "start": 554, "end": 589}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/dom/elements/attributes.js", "name": "set_custom_element_data", "kind": "function", "start": 209, "end": 240}
+{"corpus": "svelte", "path": "packages/svelte/src/compiler/phases/1-parse/read/options.js", "name": "get_static_value", "kind": "function", "start": 200, "end": 217}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/dev/elements.js", "name": "assign_locations", "kind": "function", "start": 43, "end": 60}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/dom/elements/events.js", "name": "replay_events", "kind": "function", "start": 27, "end": 47}
+{"corpus": "svelte", "path": "packages/svelte/src/compiler/utils/compile_diagnostic.js", "name": "toJSON", "kind": "method", "start": 96, "end": 106}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/dom/elements/class.js", "name": "set_mathml_class", "kind": "function", "start": 39, "end": 61}
+{"corpus": "svelte", "path": "packages/svelte/src/compiler/utils/builders.js", "name": "maybe_call", "kind": "function", "start": 138, "end": 146}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/dom/elements/bindings/media.js", "name": "bind_playback_rate", "kind": "function", "start": 115, "end": 133}
+{"corpus": "svelte", "path": "packages/svelte/src/compiler/phases/2-analyze/css/utils.js", "name": "get_possible_values", "kind": "function", "start": 85, "end": 96}
+{"corpus": "svelte", "path": "packages/svelte/src/internal/client/reactivity/effects.js", "name": "destroy_effect_children", "kind": "function", "start": 413, "end": 422}
+{"corpus": "crux", "path": "src/lib/server/mcp/fold.ts", "name": "refs", "kind": "function", "start": 361, "end": 368}
+{"corpus": "crux", "path": "src/lib/server/mcp/fold.ts", "name": "cell", "kind": "function", "start": 213, "end": 224}
+{"corpus": "crux", "path": "src/lib/server/mcp/fold.ts", "name": "foldOutline", "kind": "function", "start": 336, "end": 358}
+{"corpus": "crux", "path": "src/lib/server/risk-disk.ts", "name": "constructor", "kind": "method", "start": 26, "end": 35}
+{"corpus": "crux", "path": "src/routes/auth/login/+server.ts", "name": "GET", "kind": "function", "start": 12, "end": 21}
+{"corpus": "crux", "path": "src/lib/server/risk-capacity.ts", "name": "verifyCoverage", "kind": "function", "start": 101, "end": 112}
+{"corpus": "crux", "path": "src/lib/server/mcp/records.ts", "name": "renderRecord", "kind": "function", "start": 72, "end": 94}
+{"corpus": "crux", "path": "src/lib/server/requests.ts", "name": "create", "kind": "function", "start": 328, "end": 338}
+{"corpus": "crux", "path": "src/lib/server/mcp/fold.ts", "name": "foldUngrounded", "kind": "function", "start": 374, "end": 391}
+{"corpus": "crux", "path": "src/lib/server/mcp/render.ts", "name": "fieldsOf", "kind": "function", "start": 56, "end": 80}
+{"corpus": "crux", "path": "src/lib/server/authkit.ts", "name": "authorizeUrl", "kind": "function", "start": 18, "end": 27}
+{"corpus": "crux", "path": "src/lib/server/items.ts", "name": "fileSeed", "kind": "function", "start": 616, "end": 632}
+{"corpus": "md", "path": "30 notes/Running Claude Code overnight in Docker.md", "name": "Docker image setup", "kind": "section", "start": 8, "end": 25}
+{"corpus": "md", "path": "30 notes/The lexicographer.md", "name": "Worked from the corpus", "kind": "section", "start": 29, "end": 36}
+{"corpus": "md", "path": "30 notes/Nightshift as a code factory.md", "name": "What makes it composable", "kind": "section", "start": 67, "end": 75}
+{"corpus": "md", "path": "30 notes/Definitions-first code generation with Claude skills.md", "name": "Debate before probe, probe before work", "kind": "section", "start": 63, "end": 74}
+{"corpus": "md", "path": "30 notes/My setup.md", "name": "Raycast", "kind": "section", "start": 91, "end": 99}
+{"corpus": "md", "path": "30 notes/Pragmatic first is reconnaissance for elegance.md", "name": "Time: discovery cost and amortization", "kind": "section", "start": 32, "end": 40}
+{"corpus": "md", "path": "35 experiments/2026-06-23-graded-verdict-overflag-fix.md", "name": "Method", "kind": "section", "start": 33, "end": 45}
+{"corpus": "md", "path": "30 notes/Manipulating dates.md", "name": "Formatting", "kind": "section", "start": 31, "end": 55}
+{"corpus": "md", "path": "35 experiments/2026-06-23-lean-judge-certificate-catches-slips.md", "name": "Execution", "kind": "section", "start": 61, "end": 108}
+{"corpus": "md", "path": "30 notes/State management.md", "name": "Svelte compatibility", "kind": "section", "start": 17, "end": 30}
+{"corpus": "md", "path": "30 notes/Goals.md", "name": "Side Projects", "kind": "section", "start": 72, "end": 88}
+{"corpus": "md", "path": "30 notes/SDLC/Refactoring.md", "name": "State file", "kind": "section", "start": 62, "end": 77}
