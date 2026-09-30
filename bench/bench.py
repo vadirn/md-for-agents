@@ -129,7 +129,7 @@ def render(side, task_id):
 
 
 def read_transcript(path):
-    calls, tools, commands, answer, prompt = {}, [], [], "", None
+    calls, tools, commands, answer, prompt, handback = {}, [], [], "", None, None
     for line in path.read_text().splitlines():
         event = json.loads(line)
         message = event.get("message") or {}
@@ -148,10 +148,11 @@ def read_transcript(path):
                 continue
             tools.append(block["name"])
             if block["name"] == "SubagentHandback":
-                answer = block["input"].get("message", answer)
+                handback = block["input"].get("message", handback)
             elif block["name"] == "Bash":
                 commands.append(block["input"].get("command", ""))
-    return calls, tools, commands, answer, prompt
+    # The handback is the answer; text after it, such as "Delivered.", is not.
+    return calls, tools, commands, answer if handback is None else handback, prompt
 
 
 def expected_prompt(label, task):
@@ -270,6 +271,12 @@ def aggregate(labels, verbose=False):
 
 def verdict(base, tool):
     b, t = summarize(base), summarize(tool)
+    # A side missing runs sums fewer tokens, so no verdict reads it.
+    short = [s for s in (b, t) if s["runs"] != s["tasks"] * RUNS_PER_TASK]
+    for s in short:
+        print(f"INCOMPLETE: {s['label']} has {s['runs']} runs, expected {s['tasks'] * RUNS_PER_TASK}")
+    if short:
+        return 1
     win = t["solved"] >= b["solved"] and t["tokens"] < b["tokens"]
     print(f"{'WIN' if win else 'NOT WIN'}: {tool} solved {t['solved']}/{t['tasks']} vs {base} "
           f"{b['solved']}/{b['tasks']}, total tokens {t['tokens']:,} vs {b['tokens']:,} "
