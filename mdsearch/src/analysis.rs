@@ -15,6 +15,10 @@ use rust_stemmers::{Algorithm, Stemmer};
 /// run is a hash, a base64 blob or a minified line, never a word anyone types.
 const MAX_TOKEN_BYTES: usize = 40;
 
+/// The most words the stem cache remembers. A word past it is stemmed afresh,
+/// so a long-lived corpus answering many queries stops growing its cache.
+const MAX_STEMS: usize = 1 << 16;
+
 /// One term the chain emits, with the byte range of the word it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
@@ -75,7 +79,9 @@ impl Analyzer {
             return stem.clone();
         }
         let stem = self.russian.stem(&self.english.stem(&lower)).into_owned();
-        stems.insert(lower, stem.clone());
+        if stems.len() < MAX_STEMS {
+            stems.insert(lower, stem.clone());
+        }
         stem
     }
 }

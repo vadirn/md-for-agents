@@ -198,8 +198,13 @@ impl Corpus {
         }
         let mut ranked: Vec<usize> = (0..docs).filter(|&k| matched[k]).collect();
         // Equal scores keep index order, so the ranking is deterministic.
-        ranked.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]).then(a.cmp(&b)));
-        ranked.truncate(limit);
+        let order = |a: &usize, b: &usize| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b));
+        // Only the best `limit` need sorting, so the rest are split off unsorted.
+        if ranked.len() > limit {
+            ranked.select_nth_unstable_by(limit, order);
+            ranked.truncate(limit);
+        }
+        ranked.sort_by(order);
         Ok(ranked.into_iter().map(|k| (k, scores[k])).collect())
     }
 
