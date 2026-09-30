@@ -2,15 +2,14 @@
 //!
 //! The core knows nothing about files. A caller hands it [`Doc`] values, tunes
 //! the field weights through [`Scoring`], and reads back [`Hit`] values carrying
-//! its own identifiers. A caller with its own retrieval logic reads the term
-//! statistics through [`Corpus::num_docs`] and [`Corpus::doc_freq`].
+//! its own identifiers.
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use anyhow::{Result, bail};
 
-use crate::analysis::{Analyzer, bilingual_analyzer, query_terms};
+use crate::analysis::{Analyzer, bilingual_analyzer};
 
 /// BM25 term saturation: how fast repeats of a term stop adding score.
 const K1: f32 = 1.2;
@@ -51,14 +50,6 @@ impl Default for Scoring {
             description: 1.5,
         }
     }
-}
-
-/// The three scored fields of a [`Doc`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Field {
-    Title,
-    Description,
-    Body,
 }
 
 /// A matching window of a document's body, with the spans that matched.
@@ -129,7 +120,7 @@ impl Corpus {
     ///
     /// Every text field is analyzed by the shared stemming chain. Only
     /// `description` goes unstored, because scoring reads it and no hit returns it.
-    pub fn build(docs: &[Doc]) -> Result<Corpus> {
+    pub fn build(docs: Vec<Doc>) -> Result<Corpus> {
         let analyzer = bilingual_analyzer();
         let mut corpus = Corpus {
             ids: Vec::with_capacity(docs.len()),
@@ -140,43 +131,23 @@ impl Corpus {
             body: Postings::default(),
             analyzer,
         };
-        for (k, doc) in docs.iter().enumerate() {
+        for (k, doc) in docs.into_iter().enumerate() {
             let k = u32::try_from(k)?;
             corpus.title.add(k, corpus.analyzer.terms(&doc.title));
             corpus
                 .description
                 .add(k, corpus.analyzer.terms(&doc.description));
             corpus.body.add(k, corpus.analyzer.terms(&doc.body));
-            corpus.ids.push(doc.id.clone());
-            corpus.titles.push(doc.title.clone());
-            corpus.bodies.push(doc.body.clone());
+            corpus.ids.push(doc.id);
+            corpus.titles.push(doc.title);
+            corpus.bodies.push(doc.body);
         }
         Ok(corpus)
-    }
-
-    /// The analysis chain the index was built with. A caller analyzing its own
-    /// text through it matches the index and reuses the stems it already holds.
-    pub fn analyzer(&self) -> &Analyzer {
-        &self.analyzer
     }
 
     /// How many documents the index holds.
     pub fn num_docs(&self) -> usize {
         self.ids.len()
-    }
-
-    /// How many documents hold `term` in `field`. The term is an analyzed form,
-    /// as [`query_terms`] returns it.
-    pub fn doc_freq(&self, field: Field, term: &str) -> usize {
-        self.postings(field).doc_freq(term)
-    }
-
-    fn postings(&self, field: Field) -> &Postings {
-        match field {
-            Field::Title => &self.title,
-            Field::Description => &self.description,
-            Field::Body => &self.body,
-        }
     }
 
     /// Rank `query` over title, description, and body, returning at most `limit`
@@ -187,36 +158,18 @@ impl Corpus {
     /// error, since an empty query would report "no matches" for what is really a
     /// malformed request.
     pub fn search(&self, query: &str, limit: usize, scoring: Scoring) -> Result<Vec<Hit>> {
-        let terms = query_terms(&self.analyzer, query);
+        let terms = self.analyzer.terms(query);
         let weights = self.snippet_weights(&terms);
         Ok(self
             .top(&terms, query, limit, scoring)?
             .into_iter()
             .map(|(k, score)| Hit {
+                id: self.ids[k].clone(),
+                title: self.titles[k].clone(),
+                score,
                 snippet: self.snippet(&self.bodies[k], &weights),
-                ..self.hit(k, score)
             })
             .collect())
-    }
-
-    /// [`Corpus::search`] without the snippets, for a caller that reads only the
-    /// ranking. Each hit's snippet is empty.
-    pub fn rank(&self, query: &str, limit: usize, scoring: Scoring) -> Result<Vec<Hit>> {
-        let terms = query_terms(&self.analyzer, query);
-        Ok(self
-            .top(&terms, query, limit, scoring)?
-            .into_iter()
-            .map(|(k, score)| self.hit(k, score))
-            .collect())
-    }
-
-    fn hit(&self, k: usize, score: f32) -> Hit {
-        Hit {
-            id: self.ids[k].clone(),
-            title: self.titles[k].clone(),
-            score,
-            snippet: Snippet::default(),
-        }
     }
 
     /// The best `limit` documents for `terms` with their scores, best first.
@@ -385,7 +338,7 @@ mod tests {
 
     #[test]
     fn ranks_the_matching_document_first() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let hits = corpus
             .search("term frequency", 10, Scoring::default())
             .unwrap();
@@ -394,7 +347,7 @@ mod tests {
 
     #[test]
     fn the_description_is_scored_and_the_id_is_not() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         assert_eq!(
             ids(&corpus.search("ranking", 10, Scoring::default()).unwrap()),
             vec!["retrieval"]
@@ -412,7 +365,7 @@ mod tests {
 
     #[test]
     fn scoring_weights_are_the_callers_to_set() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let default = corpus.search("frequency", 10, Scoring::default()).unwrap();
         let flat = corpus
             .search(
@@ -435,7 +388,7 @@ mod tests {
 
     #[test]
     fn the_snippet_carries_spans_not_markup() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let hits = corpus.search("tomatoes", 10, Scoring::default()).unwrap();
         let snippet = &hits[0].snippet;
         assert!(snippet.text.to_lowercase().contains("tomatoes"));
@@ -445,7 +398,7 @@ mod tests {
 
     #[test]
     fn limit_truncates_and_zero_returns_nothing() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         assert_eq!(corpus.search("a", 1, Scoring::default()).unwrap().len(), 1);
         assert!(
             corpus
@@ -457,7 +410,7 @@ mod tests {
 
     #[test]
     fn a_query_of_only_punctuation_is_an_error() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let err = corpus.search("***", 10, Scoring::default()).unwrap_err();
         assert!(
             err.to_string().contains("no searchable terms"),
@@ -468,7 +421,7 @@ mod tests {
 
     #[test]
     fn an_apostrophe_searches_the_words_around_it() {
-        let corpus = Corpus::build(&[Doc {
+        let corpus = Corpus::build(vec![Doc {
             id: "importing".into(),
             title: "Importing".into(),
             description: String::new(),
@@ -483,7 +436,7 @@ mod tests {
 
     #[test]
     fn every_query_metacharacter_is_ordinary_text() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         // Each spelling below is syntax in a Lucene-style query grammar: a phrase quote,
         // a field selector, negation, a required term, a boost, slop, a wildcard, a
         // group. Here every one of them is a word with punctuation around it.
@@ -510,7 +463,7 @@ mod tests {
 
     #[test]
     fn an_empty_corpus_answers_without_matching() {
-        let corpus = Corpus::build(&[]).unwrap();
+        let corpus = Corpus::build(Vec::new()).unwrap();
         assert!(
             corpus
                 .search("alpha", 10, Scoring::default())
@@ -520,34 +473,10 @@ mod tests {
     }
 
     #[test]
-    fn term_statistics_are_reachable_for_a_caller_query() {
-        let corpus = Corpus::build(&docs()).unwrap();
-        assert_eq!(corpus.num_docs(), 2);
-        // "frequency" stems to "frequenc" and appears in one body.
-        let stem = &query_terms(&bilingual_analyzer(), "frequency")[0];
-        assert_eq!(corpus.doc_freq(Field::Body, stem), 1);
-        assert_eq!(corpus.doc_freq(Field::Title, stem), 0);
-        assert_eq!(corpus.doc_freq(Field::Body, "absent"), 0);
-    }
-
-    #[test]
-    fn rank_orders_like_search_without_snippets() {
-        let corpus = Corpus::build(&docs()).unwrap();
-        let ranked = corpus
-            .rank("term frequency", 10, Scoring::default())
-            .unwrap();
-        let searched = corpus
-            .search("term frequency", 10, Scoring::default())
-            .unwrap();
-        assert_eq!(ids(&ranked), ids(&searched));
-        assert!(ranked.iter().all(|h| h.snippet.text.is_empty()));
-    }
-
-    #[test]
     fn scores_follow_bm25() {
         // One term in one of two single-word bodies: idf = ln(1 + 1.5 / 1.5) = ln 2,
         // and a body at the average length scores idf * (k1 + 1) * 1 / (1 + k1).
-        let corpus = Corpus::build(&[
+        let corpus = Corpus::build(vec![
             Doc {
                 id: "a".into(),
                 body: "alpha".into(),
@@ -560,7 +489,7 @@ mod tests {
             },
         ])
         .unwrap();
-        let hits = corpus.rank("alpha", 10, Scoring::default()).unwrap();
+        let hits = corpus.search("alpha", 10, Scoring::default()).unwrap();
         assert_eq!(ids(&hits), ["a"]);
         assert!(
             (hits[0].score - 2f32.ln()).abs() < 1e-6,
@@ -573,7 +502,7 @@ mod tests {
     fn a_snippet_is_the_heaviest_window_and_the_earliest_on_a_tie() {
         let filler = "word ".repeat(40);
         let body = format!("rare first. {filler} rare second.");
-        let corpus = Corpus::build(&[Doc {
+        let corpus = Corpus::build(vec![Doc {
             id: "x".into(),
             body: body.clone(),
             ..Doc::default()

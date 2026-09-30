@@ -229,7 +229,7 @@ fn the_core_indexes_documents_a_caller_supplies() {
         .collect();
     assert_eq!(docs.len(), 1);
 
-    let corpus = Corpus::build(&docs).unwrap();
+    let corpus = Corpus::build(docs).unwrap();
     let hits = corpus
         .search(
             "term frequency",
@@ -244,12 +244,8 @@ fn the_core_indexes_documents_a_caller_supplies() {
     assert_eq!(hits[0].id, "notes/Retrieval.md");
     assert!(!hits[0].snippet.highlights.is_empty());
 
-    // A caller with its own retrieval reads the term statistics directly.
-    assert_eq!(
-        corpus.num_docs(),
-        1,
-        "the index is reachable without going through search()"
-    );
+    // The corpus reports its size without a search.
+    assert_eq!(corpus.num_docs(), 1);
 }
 
 /// Documents need not come from disk at all.
@@ -263,7 +259,7 @@ fn the_core_needs_no_files() {
         description: String::new(),
         body: "A document assembled in memory, never written to disk.".into(),
     }];
-    let hits = Corpus::build(&docs)
+    let hits = Corpus::build(docs)
         .unwrap()
         .search("assembled", DEFAULT_LIMIT, Scoring::default())
         .unwrap();

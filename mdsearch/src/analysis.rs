@@ -1,9 +1,9 @@
 //! Text analysis shared by every index built on this core: the stemming chain
 //! and the query tokenizer.
 //!
-//! A caller running its own query against [`crate::Corpus`] uses these to match
-//! how the documents were indexed. Analyzing a query differently from the corpus
-//! silently skews relevance.
+//! [`crate::Corpus`] analyzes both its documents and every query through this
+//! one chain. Analyzing a query differently from the corpus silently skews
+//! relevance.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -51,10 +51,15 @@ impl Analyzer {
     }
 
     /// Every term of `text` in order, repeats kept.
+    ///
+    /// A query reaches the index through this and nothing else. No character is
+    /// reserved, because nothing parses the text: it is tokenized and looked up. A
+    /// quotation mark, an apostrophe, a colon or a bracket separates words and
+    /// carries no meaning.
     pub fn terms(&self, text: &str) -> Vec<String> {
-        words(text)
-            .filter(|span| span.len() < MAX_TOKEN_BYTES)
-            .map(|span| self.normalize(&text[span]))
+        self.tokens(text)
+            .into_iter()
+            .map(|token| token.text)
             .collect()
     }
 
@@ -92,16 +97,6 @@ fn words(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
     })
 }
 
-/// Split `text` into the terms an index built on `analyzer` actually holds.
-///
-/// A query reaches the index through this and nothing else. No character is
-/// reserved, because nothing parses the text: it is tokenized and looked up. A
-/// quotation mark, an apostrophe, a colon or a bracket separates words and
-/// carries no meaning.
-pub fn query_terms(analyzer: &Analyzer, text: &str) -> Vec<String> {
-    analyzer.terms(text)
-}
-
 /// Build the analysis chain every field of a [`crate::Corpus`] is indexed with.
 pub fn bilingual_analyzer() -> Analyzer {
     Analyzer {
@@ -116,7 +111,7 @@ mod tests {
     use super::*;
 
     fn terms(text: &str) -> Vec<String> {
-        query_terms(&bilingual_analyzer(), text)
+        bilingual_analyzer().terms(text)
     }
 
     #[test]

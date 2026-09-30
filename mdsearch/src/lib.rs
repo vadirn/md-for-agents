@@ -2,10 +2,8 @@
 //!
 //! [`Corpus`] is the core: an in-RAM BM25 index over [`Doc`] values a caller
 //! supplies, with the field weights in [`Scoring`] and the stemming chain in
-//! [`analysis`]. It knows nothing about files, so a caller with its own corpus,
-//! its own exclusion rules, or its own ranking reuses it whole — reading term
-//! statistics through [`Corpus::doc_freq`] when [`Corpus::search`] is not the
-//! retrieval it wants.
+//! [`analysis`]. It knows nothing about files, so a caller with its own corpus
+//! or its own exclusion rules reuses it whole.
 //!
 //! [`scan`] and [`run`] are the Markdown half the `mdsearch` binary is built
 //! from: walk a folder, turn each file into a `Doc` by its name, its frontmatter
@@ -21,6 +19,6 @@ mod scan;
 // Re-exported so a caller reads a `SearchResult` without also depending on the
 // crate these come from.
 pub use cli::{TextJson, estimate_tokens};
-pub use corpus::{Corpus, Doc, Field, Hit, Scoring, Snippet};
+pub use corpus::{Corpus, Doc, Hit, Scoring, Snippet};
 pub use render::{SearchOutput, SearchResult, run, search};
 pub use scan::{MARKDOWN_EXTENSIONS, MdFile, Walk, scan};
