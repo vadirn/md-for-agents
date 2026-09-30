@@ -23,7 +23,10 @@ const MINIFIED_LINE: usize = 300;
 const MAX_LEADING_COMMENT: usize = 40;
 
 /// The ripgrep file types the walk admits, per decision MDAGENTS-23.
-const TYPES: &[&str] = &["markdown", "ts", "py", "rust", "ruby"];
+/// JavaScript has its own type, apart from `ts`, though the TypeScript
+/// outliner reads it. A `.vue` file the `js` type admits has no outliner, so
+/// the walk skips it.
+const TYPES: &[&str] = &["markdown", "ts", "js", "py", "rust", "ruby"];
 
 /// What a section's file holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -541,6 +544,20 @@ mod tests {
         assert_eq!(split_identifiers("HTTPServer x"), "HTTP Server ");
         assert_eq!(split_identifiers("parse_input"), "");
         assert_eq!(split_identifiers("utf8"), "utf 8 ");
+    }
+
+    #[test]
+    fn the_walk_admits_javascript_beside_typescript() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["a.js", "b.mjs", "c.ts", "d.vue", "e.txt"] {
+            std::fs::write(dir.path().join(name), "function f() {\n}\n").unwrap();
+        }
+        let paths: Vec<String> = walk(dir.path())
+            .unwrap()
+            .into_iter()
+            .map(|f| f.path)
+            .collect();
+        assert_eq!(paths, ["a.js", "b.mjs", "c.ts"]);
     }
 
     #[test]
