@@ -237,6 +237,8 @@ impl Corpus {
             let idf = (1.0 + (docs - df + 0.5) / (df + 0.5)).ln();
             let term_weight = idf * (1.0 + K1) * weight;
             for &(doc, count) in list {
+                // Lengths are exact. Tantivy rounded them into 256 buckets, so scores
+                // differ slightly from the tantivy build and near-ties can reorder.
                 let length = postings.lengths[doc as usize] as f32;
                 let norm = K1 * (1.0 - B + B * length / average);
                 let count = count as f32;
@@ -478,6 +480,24 @@ mod tests {
     }
 
     #[test]
+    fn a_zero_weight_field_still_matches_at_score_zero() {
+        let corpus = Corpus::build(docs()).unwrap();
+        // "ranking" sits only in the retrieval description.
+        let hits = corpus
+            .search(
+                "ranking",
+                10,
+                Scoring {
+                    title: 1.0,
+                    description: 0.0,
+                },
+            )
+            .unwrap();
+        assert_eq!(ids(&hits), ["retrieval"]);
+        assert_eq!(hits[0].score, 0.0);
+    }
+
+    #[test]
     fn scores_follow_bm25() {
         // One term in one of two single-word bodies: idf = ln(1 + 1.5 / 1.5) = ln 2,
         // and a body at the average length scores idf * (k1 + 1) * 1 / (1 + k1).
@@ -501,6 +521,34 @@ mod tests {
             "got {}",
             hits[0].score
         );
+    }
+
+    #[test]
+    fn a_longer_body_scores_lower_for_the_same_count() {
+        // Bodies of 1, 3 and 1 terms average 5/3. Each length divides by that
+        // average, and B weighs the quotient against a flat 1 - B.
+        let body = |id: &str, text: &str| Doc {
+            id: id.into(),
+            body: text.into(),
+            ..Doc::default()
+        };
+        let corpus = Corpus::build(vec![
+            body("short", "alpha"),
+            body("long", "alpha beta gamma"),
+            body("other", "delta"),
+        ])
+        .unwrap();
+        let hits = corpus.search("alpha", 10, Scoring::default()).unwrap();
+        assert_eq!(ids(&hits), ["short", "long"]);
+        let idf = 1.6f32.ln();
+        let short = idf * 2.2 / (1.0 + 1.2 * (0.25 + 0.75 * 0.6));
+        let long = idf * 2.2 / (1.0 + 1.2 * (0.25 + 0.75 * 1.8));
+        assert!(
+            (hits[0].score - short).abs() < 1e-5,
+            "got {}",
+            hits[0].score
+        );
+        assert!((hits[1].score - long).abs() < 1e-5, "got {}", hits[1].score);
     }
 
     #[test]

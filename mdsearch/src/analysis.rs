@@ -148,6 +148,13 @@ mod tests {
     }
 
     #[test]
+    fn uppercase_outside_ascii_lowercases_char_by_char() {
+        assert_eq!(terms("ДОКУМЕНТЫ"), terms("документы"));
+        // A word-final Σ becomes σ, not the final form ς, so both spellings meet.
+        assert_eq!(terms("ΟΔΟΣ"), ["οδοσ"]);
+    }
+
+    #[test]
     fn a_token_of_forty_bytes_or_more_is_dropped() {
         let long = "a".repeat(40);
         let kept = "b".repeat(39);
