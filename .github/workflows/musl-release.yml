@@ -20,7 +20,7 @@ jobs:
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
       - run: cargo +"$RUST_TOOLCHAIN" test --locked --workspace
       - run: cargo +"$RUST_TOOLCHAIN" clippy --locked --workspace --all-targets
-      - run: cargo +"$RUST_TOOLCHAIN" build --locked --release -p mdstruct -p mdread
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --release -p mdstruct
       - run: sh scripts/release-fixtures.sh target/release macos-output
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -39,22 +39,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sudo apt-get update && sudo apt-get install -y musl-tools
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target aarch64-unknown-linux-musl
-      - run: cargo +"$RUST_TOOLCHAIN" test --locked --target aarch64-unknown-linux-musl -p mdstruct -p mdread
-      - run: cargo +"$RUST_TOOLCHAIN" build --locked --release --target aarch64-unknown-linux-musl -p mdstruct -p mdread
+      - run: cargo +"$RUST_TOOLCHAIN" test --locked --target aarch64-unknown-linux-musl -p mdstruct
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --release --target aarch64-unknown-linux-musl -p mdstruct
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-output
           path: macos-output
       - name: Verify architecture and static linkage
         run: |
-          for tool in mdstruct mdread; do
-            binary="target/aarch64-unknown-linux-musl/release/$tool"
-            readelf -h "$binary" | grep -q 'Machine:.*AArch64'
-            if readelf -l "$binary" | grep -q INTERP; then
-              echo "$tool needs a dynamic loader" >&2
-              exit 1
-            fi
-          done
+          binary=target/aarch64-unknown-linux-musl/release/mdstruct
+          readelf -h "$binary" | grep -q 'Machine:.*AArch64'
+          if readelf -l "$binary" | grep -q INTERP; then
+            echo "mdstruct needs a dynamic loader" >&2
+            exit 1
+          fi
       - name: Run in plain Alpine and compare macOS output
         run: |
           docker run --rm --platform linux/arm64 \
@@ -64,15 +62,13 @@ jobs:
       - name: Assemble pinned rootfs addition and binary checksums
         run: |
           mkdir -p rootfs/usr/local/bin dist
-          for tool in mdstruct mdread; do
-            cp "target/aarch64-unknown-linux-musl/release/$tool" "rootfs/usr/local/bin/$tool"
-            cp "rootfs/usr/local/bin/$tool" "dist/$tool-aarch64-unknown-linux-musl"
-          done
+          cp target/aarch64-unknown-linux-musl/release/mdstruct rootfs/usr/local/bin/mdstruct
+          cp rootfs/usr/local/bin/mdstruct dist/mdstruct-aarch64-unknown-linux-musl
           tar --sort=name --mtime="@$(git show -s --format=%ct HEAD)" \
             --owner=0 --group=0 --numeric-owner -C rootfs -cf - . \
             | gzip -n > dist/md-tools-aarch64-unknown-linux-musl.tar.gz
           git rev-parse HEAD > dist/SOURCE_REVISION
-          (cd dist && sha256sum mdstruct-* mdread-* md-tools-*.tar.gz > SHA256SUMS)
+          (cd dist && sha256sum mdstruct-* md-tools-*.tar.gz > SHA256SUMS)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: musl-tools
@@ -85,33 +81,25 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target wasm32-unknown-unknown
-      - run: cargo +"$RUST_TOOLCHAIN" build --locked --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm -p mdread-wasm
+      - run: cargo +"$RUST_TOOLCHAIN" build --locked --profile wasm --target wasm32-unknown-unknown -p mdstruct-wasm
       - run: node --test scripts/wasm-loaders.test.mjs
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-output
           path: macos-output
-      - name: Run the fixtures through the modules and compare macOS output
+      - name: Run the fixtures through the module and compare macOS output
         run: |
           node scripts/wasm-fixtures.mjs \
             target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm \
-            target/wasm32-unknown-unknown/wasm/mdread_wasm.wasm \
             wasm-output
-          for expected in macos-output/*.mdstruct.stdout macos-output/*.mdread-*.stdout macos-output/*.mdread-*.exit; do
+          for expected in macos-output/*.mdstruct.stdout; do
             cmp "$expected" "wasm-output/$(basename "$expected")"
           done
-          # A failed reading's message is the CLI's stderr. A note beside a
-          # successful one stays on the CLI's stderr, so only failures compare.
-          for actual in wasm-output/*.mdread-*.stderr; do
-            cmp "macos-output/$(basename "$actual")" "$actual"
-          done
-      - name: Assemble the modules and their loaders
+      - name: Assemble the module and its loader
         run: |
           mkdir dist
-          for tool in mdstruct mdread; do
-            cp "target/wasm32-unknown-unknown/wasm/${tool}_wasm.wasm" "dist/$tool.wasm"
-            cp "$tool-wasm/$tool.mjs" "$tool-wasm/$tool.d.mts" dist/
-          done
+          cp target/wasm32-unknown-unknown/wasm/mdstruct_wasm.wasm dist/mdstruct.wasm
+          cp mdstruct-wasm/mdstruct.mjs mdstruct-wasm/mdstruct.d.mts dist/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wasm
@@ -133,8 +121,8 @@ jobs:
         with:
           name: wasm
           path: dist
-      - name: Add the modules' checksums
-        run: (cd dist && sha256sum mdstruct.wasm mdstruct.mjs mdstruct.d.mts mdread.wasm mdread.mjs mdread.d.mts >> SHA256SUMS)
+      - name: Add the module's checksums
+        run: (cd dist && sha256sum mdstruct.wasm mdstruct.mjs mdstruct.d.mts >> SHA256SUMS)
       - name: Publish verified tag assets
         env:
           GH_TOKEN: ${{ github.token }}

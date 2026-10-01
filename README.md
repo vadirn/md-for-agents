@@ -2,7 +2,7 @@
 
 Command-line tools that give an agent a structural grip on Markdown.
 
-An agent that reads a whole Markdown file spends context on parts it does not need. These tools let it read the shape first, then unfold only what the task needs.
+They parse a file into byte-exact spans, normalize its layout without reflowing prose, and rank a folder's files against a query.
 
 Every tool writes data to stdout and diagnostics to stderr, so a pipe into `jq` stays clean.
 
@@ -11,7 +11,6 @@ Every tool writes data to stdout and diagnostics to stderr, so a pipe into `jq` 
 | Tool       | What it does |
 | ---------- | ------------ |
 | `mdstruct` | Parses Markdown to NDJSON: one JSON document per line, one line per input. |
-| `mdread`   | Folds a file to one line per section, then unfolds one section by address. |
 | `mdformat` | Prints CommonMark from that same parse, scoped to whitespace and tables. |
 | `mdsearch` | Ranks a folder's Markdown by BM25, over an index built in RAM for one run. |
 
@@ -23,80 +22,17 @@ The workspace is edition 2024, so it needs Rust 1.85 or newer. Clone it and buil
 cargo build --release
 ```
 
-The binaries land in `target/release/`. Fold this file to its shape:
+The binaries land in `target/release/`. Find the file that covers releases:
 
 ```bash
-./target/release/mdread README.md
+./target/release/mdsearch "release workflow" .
 ```
 
-Then unfold one section by name:
+Then parse it to its structure:
 
 ```bash
-./target/release/mdread README.md quick-start
+./target/release/mdstruct README.md --pretty
 ```
-
-## mdread
-
-`mdread` folds, then unfolds. The fold shows the heading tree, one line per section, with a line count and an estimated token count. The unfold prints the one section you name.
-
-An address is any of these:
-
-- a dotted-numeric path into the heading tree, such as `2.1.3`,
-- a heading slug, such as `quick-start`,
-- `0` or `text` for the lede before the first heading,
-- `fm` for the frontmatter block, or `fm.<path>` for one value inside it,
-- `links` for the outgoing links.
-
-The reserved names win a collision. A `## Links` section is served by its numeric address instead, and the reader says so when the two collide.
-
-A dotted-numeric address that misses fails with how many sections exist at the level where it stops, and their range. Under a lone top-level section, the error also suggests the full address. It names any heading whose slug the address spells.
-
-```bash
-mdread notes.md fm.title      # one frontmatter value
-mdread notes.md 2.1 --depth 1 # one subtree, one level deep
-mdread notes.md --format json # the same shape, machine-readable
-```
-
-## mdread in WebAssembly
-
-`mdread-wasm` compiles the reader to a WebAssembly module with no imports. A JavaScript host loads it once and reads in-process. For the same content and options, the text is byte-identical to what `mdread - [address]` prints.
-
-```js
-import { load } from "./mdread.mjs";
-
-const mdread = await load(await Bun.file("mdread.wasm").arrayBuffer());
-const overview = mdread.read(page);
-const section = mdread.read(page, { address: "2.1", depth: 1 });
-```
-
-The loader, `mdread-wasm/mdread.mjs`, runs in Bun, Node, and browsers. `read` takes the content as a string or UTF-8 bytes, and these options. Each option the caller omits or sets to `null` takes the CLI's default. `depth` and `threshold` take non-negative integers, and `Infinity` or `NaN` throws instead of reading as omitted.
-
-| Option      | CLI equivalent |
-| ----------- | -------------- |
-| `address`   | the address argument |
-| `depth`     | `--depth` |
-| `full`      | `--full` |
-| `threshold` | `--threshold` |
-
-`read` returns the text and throws where the CLI exits non-zero, with the message the CLI prints. Bytes pass through as they are, as `mdread -` reads its stdin, so pass a file's bytes to keep its byte-order mark: `TextDecoder` drops it by default. The overview names the content `-`, as the CLI names stdin. A note the CLI prints on stderr beside a successful reading is not returned. The module reads with the CLI's default dialect, so `--strict-headings` and `--wikilinks-only` have no option.
-
-The loader recovers from a trap as `mdstruct.mjs` does. A document nested deeper than the engine's stack allows throws the engine's error, and the next call runs in a fresh instance. An instance left holding more than 64 MiB is replaced too.
-
-Build the module:
-
-```bash
-cargo build --profile wasm --target wasm32-unknown-unknown -p mdread-wasm
-```
-
-It lands at `target/wasm32-unknown-unknown/wasm/mdread_wasm.wasm`. A host without the loader calls three exports:
-
-| Export                                                           | Contract |
-| ---------------------------------------------------------------- | -------- |
-| `alloc(len) -> ptr`                                              | Reserves `len` bytes for the content or the options. |
-| `read_json(content, content_len, options, options_len) -> frame` | Reads the content as `mdread -` reads stdin, with the options `{"address"?: ..., "depth"?: ..., "full"?: ..., "threshold"?: ...}` as JSON. The frame is a little-endian `u32` length, then that many bytes of `{"text": ...}` JSON. |
-| `dealloc(ptr, len)`                                              | Frees a block with its `len`, or a frame with 4 plus its length. |
-
-Where the CLI would exit non-zero, the frame holds `{"error": ...}` with the CLI's message instead of text. So do options that are not a JSON object of that shape, or that name an unknown option. A trap leaves the instance unusable, so a host that keeps one instance across calls replaces it after one.
 
 ## mdstruct
 
@@ -197,16 +133,14 @@ The index is built in RAM for the one run, so an edit needs no reindexing.
 
 ```
 cli/            command-line concerns the tools share: format flag, token estimate, stdout guard
-mdstruct/       the parsing core; mdread, mdformat, and mdstruct-wasm depend on it
+mdstruct/       the parsing core; mdformat and mdstruct-wasm depend on it
 mdstruct-wasm/  mdstruct as a WebAssembly module, with its JavaScript loader
-mdread/         progressive-unfolding reader
-mdread-wasm/    mdread as a WebAssembly module, with its JavaScript loader
-wasm-abi/       the host edge both WebAssembly modules share: alloc, dealloc, and the frame
+wasm-abi/       the host edge the WebAssembly module uses: alloc, dealloc, and the frame
 mdformat/       block-level passthrough printer
 mdsearch/       BM25 search over a folder
 ```
 
-`cli` and `wasm-abi` are libraries with no binary, and `mdstruct-wasm` and `mdread-wasm` each ship a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` and `mdread` libraries build without clap when their `cli` feature is off, which is how their dependents take them.
+`cli` and `wasm-abi` are libraries with no binary, and `mdstruct-wasm` ships a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` library builds without clap when its `cli` feature is off, which is how its dependents take it.
 
 Shared dependencies are declared once in the root `Cargo.toml` and inherited with `.workspace = true`. So two members cannot drift onto different versions of the same crate.
 
@@ -240,15 +174,14 @@ Both must pass before a change lands.
 
 ## Releases
 
-The `musl tools` workflow checks every main-branch push, pull request, and manual run. It builds `mdstruct` and `mdread` with Rust 1.91.1 on a native arm64 Linux runner, tests the musl build, and runs both tools inside plain Alpine 3.22.6. The release gate compares fixture output byte-for-byte with the macOS build.
+The `musl tools` workflow checks every main-branch push, pull request, and manual run. It builds `mdstruct` with Rust 1.91.1 on a native arm64 Linux runner, tests the musl build, and runs it inside plain Alpine 3.22.6. The release gate compares fixture output byte-for-byte with the macOS build.
 
-The same workflow builds `mdstruct.wasm` and `mdread.wasm` with Rust 1.91.1. It runs the fixtures through both modules in Node and compares that output byte-for-byte with the macOS build too. `mdread.wasm` reads each fixture with every case in `scripts/mdread-cases.txt`, and a failing case compares its error message.
+The same workflow builds `mdstruct.wasm` with Rust 1.91.1. It runs the fixtures in `scripts/fixtures` through the module in Node and compares that output byte-for-byte with the macOS build too.
 
 After those checks pass, pushing a `v*` tag publishes the same tested files:
 
-- the musl binaries, and `md-tools-aarch64-unknown-linux-musl.tar.gz`, which holds `usr/local/bin/mdstruct` and `usr/local/bin/mdread` for rootfs assembly
+- the musl binary, and `md-tools-aarch64-unknown-linux-musl.tar.gz`, which holds `usr/local/bin/mdstruct` for rootfs assembly
 - `mdstruct.wasm`, with its loader `mdstruct.mjs` and types `mdstruct.d.mts`
-- `mdread.wasm`, with its loader `mdread.mjs` and types `mdread.d.mts`
 - `SHA256SUMS` and `SOURCE_REVISION`
 
 Pin both the release URL and the SHA-256 of each asset you consume. Branch and manual runs upload CI artifacts without creating a release.
