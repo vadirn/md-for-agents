@@ -8,9 +8,14 @@ use crate::model::{Document, Node, flatten, is_numeric_address};
 /// Why an address failed to resolve. Carries the data each variant needs to
 /// reproduce the exact message the `resolve_address` wrapper prints.
 #[derive(Debug)]
-pub(crate) enum ResolveError {
+pub(crate) enum ResolveError<'a> {
     NoTextRegion(String),
-    OutOfRange(String),
+    /// A dotted-numeric address that runs past the sections at one level.
+    OutOfRange {
+        address: String,
+        /// The section whose subsections the path ran past; `None` at the top level.
+        parent: Option<&'a Node>,
+    },
     NoSlugMatch(String),
     /// Holds the candidate `(address, heading)` pairs.
     Ambiguous(String, Vec<(String, String)>),
@@ -19,7 +24,7 @@ pub(crate) enum ResolveError {
 /// Pure address resolution: all the descent/match logic, no IO.
 /// `resolve_address` wraps this to format the error; tests call it directly so
 /// there is no parallel test mirror to drift.
-pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, ResolveError> {
+pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, ResolveError<'a>> {
     // `[0]` / `text` → the synthetic text node. Reserved, like `fm` and
     // `links`, so a heading slugging to `text` is reachable only by its number.
     // The predicate is `shadow`'s, so interception and announcement cannot
@@ -32,26 +37,24 @@ pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, 
     }
 
     if is_numeric_address(address) {
-        let mut parts: Vec<usize> = Vec::new();
-        for seg in address.split('.') {
-            // An all-digit segment can still overflow `usize`; treat overflow as
-            // out-of-range rather than panicking.
-            match seg.parse::<usize>() {
-                Ok(n) => parts.push(n),
-                Err(_) => return Err(ResolveError::OutOfRange(address.to_string())),
-            }
-        }
         let mut level: &[Node] = &doc.tree;
         let mut current: Option<&Node> = None;
-        for (depth, &idx) in parts.iter().enumerate() {
-            if idx == 0 || idx > level.len() {
-                return Err(ResolveError::OutOfRange(address.to_string()));
-            }
-            let node = &level[idx - 1];
+        for seg in address.split('.') {
+            // An all-digit segment can still overflow `usize`; treat overflow as
+            // out-of-range rather than panicking. Parsing as the walk descends
+            // pins the miss to the level where it happens.
+            let node = match seg.parse::<usize>() {
+                Ok(idx) if idx >= 1 => level.get(idx - 1),
+                _ => None,
+            };
+            let Some(node) = node else {
+                return Err(ResolveError::OutOfRange {
+                    address: address.to_string(),
+                    parent: current,
+                });
+            };
             current = Some(node);
-            if depth + 1 < parts.len() {
-                level = &node.children;
-            }
+            level = &node.children;
         }
         return Ok(current.expect("numeric address yields a node"));
     }
@@ -88,8 +91,49 @@ pub(crate) fn resolve_address<'a>(doc: &'a Document, address: &str) -> Result<&'
             }
             Err(anyhow::anyhow!(msg))
         }
-        Err(ResolveError::OutOfRange(addr)) => {
-            Err(anyhow::anyhow!("Address '{}' out of range", addr))
+        Err(ResolveError::OutOfRange { address, parent }) => {
+            // Name what the level holds, so the caller corrects the address
+            // without folding the file again. The labels are the nodes' own
+            // addresses, so `01.9` names section 1.
+            let (owner, noun, level) = match parent {
+                Some(p) => (format!("section {}", p.address), "subsection", &p.children),
+                None => ("this file".to_string(), "top-level section", &doc.tree),
+            };
+            let holds = match level.as_slice() {
+                [] => format!("no {}s", noun),
+                [only] => format!("1 {} ({})", noun, only.address),
+                [first, .., last] => format!(
+                    "{} {}s ({}–{})",
+                    level.len(),
+                    noun,
+                    first.address,
+                    last.address
+                ),
+            };
+            let mut msg = format!(
+                "Address '{}' out of range; {} has {}",
+                address, owner, holds
+            );
+            // One top-level section numbers everything under it, so the caller
+            // likely left off the leading `1.`.
+            if parent.is_none()
+                && doc.tree.len() == 1
+                && let Ok(n) = resolve(doc, &format!("1.{}", address))
+            {
+                msg.push_str(&format!("; did you mean '{}'", n.address));
+            }
+            // A numeric address never reaches the slug match, so name any
+            // heading it spells, as the reserved-address errors do.
+            let needle = crate::slug::segment(&address);
+            let mut all: Vec<&Node> = Vec::new();
+            flatten(&doc.tree, &mut all);
+            for n in all.into_iter().filter(|n| n.slug == needle) {
+                msg.push_str(&format!(
+                    "; heading '{}' ({}) also answers to '{}'",
+                    n.heading, n.address, n.slug
+                ));
+            }
+            Err(anyhow::anyhow!(msg))
         }
         Err(ResolveError::NoSlugMatch(needle)) => {
             Err(anyhow::anyhow!("No heading matches slug '{}'", needle))

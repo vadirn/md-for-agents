@@ -22,6 +22,9 @@ rich_num_1_json	mdread fixtures/rich.md 1 --format json
 rich_num_1_full_json	mdread fixtures/rich.md 1 --full --format json
 rich_err_no_slug	mdread fixtures/rich.md nope
 rich_err_out_of_range	mdread fixtures/rich.md 99
+rich_err_past_subsections	mdread fixtures/rich.md 1.9
+rich_err_past_one_subsection	mdread fixtures/rich.md 1.1.5
+rich_err_no_subsections	mdread fixtures/rich.md 1.2.5
 fmdoc_overview	mdread fixtures/nested-fm.md
 fmdoc_fm	mdread fixtures/nested-fm.md fm
 fmdoc_fm_json	mdread fixtures/nested-fm.md fm --format json
@@ -44,6 +47,7 @@ nolede_fm	mdread fixtures/no-lede.md fm
 nolede_links	mdread fixtures/no-lede.md links
 nolede_err_text	mdread fixtures/no-lede.md text
 nolede_err_0	mdread fixtures/no-lede.md 0
+nolede_err_out_of_range	mdread fixtures/no-lede.md 4.2
 collide_overview	mdread fixtures/collisions.md
 collide_overview_json	mdread fixtures/collisions.md --format json
 collide_links	mdread fixtures/collisions.md links
@@ -52,6 +56,7 @@ collide_num_1_1	mdread fixtures/collisions.md 1.1
 collide_err_fm	mdread fixtures/collisions.md fm
 collide_err_text	mdread fixtures/collisions.md text
 collide_err_0	mdread fixtures/collisions.md 0
+collide_err_under_root	mdread fixtures/collisions.md 4
 order_overview	mdread fixtures/collisions-order.md
 order_fm	mdread fixtures/collisions-order.md fm
 order_frontmatter	mdread fixtures/collisions-order.md frontmatter
@@ -68,6 +73,8 @@ dialect_num_1	mdread fixtures/dialects.md 1
 dialect_num_1_strict	mdread fixtures/dialects.md 1 --strict-headings
 dialect_text_strict	mdread fixtures/dialects.md text --strict-headings
 dialect_err_text	mdread fixtures/dialects.md text
+bare_overview	mdread fixtures/no-headings.md
+bare_err_out_of_range	mdread fixtures/no-headings.md 1
 cli_err_missing_file	mdread fixtures/does-not-exist.md
 cli_err_bad_format	mdread fixtures/rich.md --format yaml
 cli_err_bad_depth	mdread fixtures/rich.md 1 --depth abc

@@ -397,7 +397,9 @@ mod tests {
         // An all-digit address that overflows usize must report out-of-range.
         let doc = parse_document(SAMPLE);
         match resolve(&doc, "99999999999999999999") {
-            Err(ResolveError::OutOfRange(addr)) => assert_eq!(addr, "99999999999999999999"),
+            Err(ResolveError::OutOfRange { address, .. }) => {
+                assert_eq!(address, "99999999999999999999")
+            }
             _ => panic!("expected OutOfRange, got a different result"),
         }
     }
@@ -407,8 +409,88 @@ mod tests {
         let doc = parse_document(SAMPLE);
         assert!(matches!(
             resolve(&doc, "99"),
-            Err(ResolveError::OutOfRange(_))
+            Err(ResolveError::OutOfRange { .. })
         ));
+    }
+
+    /// The message `resolve_address` returns for an address that fails.
+    fn miss(doc: &Document, address: &str) -> String {
+        resolve_address(doc, address).unwrap_err().to_string()
+    }
+
+    #[test]
+    fn out_of_range_names_the_level_where_the_path_stops() {
+        let doc = parse_document(SAMPLE);
+        assert_eq!(
+            miss(&doc, "9.2"),
+            "Address '9.2' out of range; this file has 4 top-level sections (1–4)"
+        );
+        assert_eq!(
+            miss(&doc, "1.9"),
+            "Address '1.9' out of range; section 1 has 2 subsections (1.1–1.2)"
+        );
+        assert_eq!(
+            miss(&doc, "1.1.5"),
+            "Address '1.1.5' out of range; section 1.1 has no subsections"
+        );
+        // A zero, an overflowing segment and a leading zero stop at a level too.
+        assert_eq!(
+            miss(&doc, "0.1"),
+            "Address '0.1' out of range; this file has 4 top-level sections (1–4)"
+        );
+        assert_eq!(
+            miss(&doc, "1.99999999999999999999"),
+            "Address '1.99999999999999999999' out of range; section 1 has 2 subsections (1.1–1.2)"
+        );
+        assert_eq!(
+            miss(&doc, "01.9"),
+            "Address '01.9' out of range; section 1 has 2 subsections (1.1–1.2)"
+        );
+    }
+
+    #[test]
+    fn out_of_range_counts_one_section_and_none() {
+        let one = parse_document("# Title\n\n## Only\n\nbody\n");
+        assert_eq!(
+            miss(&one, "4.2"),
+            "Address '4.2' out of range; this file has 1 top-level section (1)"
+        );
+        assert_eq!(
+            miss(&one, "1.2"),
+            "Address '1.2' out of range; section 1 has 1 subsection (1.1)"
+        );
+        let none = parse_document("Prose and no heading.\n");
+        assert_eq!(
+            miss(&none, "1"),
+            "Address '1' out of range; this file has no top-level sections"
+        );
+    }
+
+    #[test]
+    fn out_of_range_suggests_the_address_under_a_lone_top_level_section() {
+        let wiki = parse_document("# Title\n\n## A\n\n## B\n\n### B one\n\nbody\n");
+        assert_eq!(
+            miss(&wiki, "2.1"),
+            "Address '2.1' out of range; this file has 1 top-level section (1); did you mean '1.2.1'"
+        );
+        // No suggestion when the prefixed path misses too.
+        assert_eq!(
+            miss(&wiki, "4.2"),
+            "Address '4.2' out of range; this file has 1 top-level section (1)"
+        );
+    }
+
+    #[test]
+    fn out_of_range_names_a_heading_the_address_spells() {
+        let log = parse_document("# Changelog\n\n## 2024\n\nyear.\n\n## 1.2.0\n\nrelease.\n");
+        assert_eq!(
+            miss(&log, "2024"),
+            "Address '2024' out of range; this file has 1 top-level section (1); heading '2024' (1.1) also answers to '2024'"
+        );
+        assert_eq!(
+            miss(&log, "1.2.0"),
+            "Address '1.2.0' out of range; section 1.2 has no subsections; heading '1.2.0' (1.2) also answers to '1-2-0'"
+        );
     }
 
     #[test]
