@@ -1,13 +1,11 @@
-// Checks what the JavaScript loaders do themselves, which the fixture
-// comparison cannot reach: recovery after the module traps, and how a
-// JavaScript string crosses into the module.
+// Checks what the JavaScript loader does itself, which the fixture comparison
+// cannot reach: the stack the module reserves, and recovery after it traps.
 //
 //   node --test scripts/wasm-loaders.test.mjs   (after the wasm build)
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { load as loadMdread } from "../mdread-wasm/mdread.mjs";
 import { load as loadMdstruct } from "../mdstruct-wasm/mdstruct.mjs";
 
 const wasm = (name) =>
@@ -32,55 +30,4 @@ test("mdstruct: a trap leaves the next call as a fresh module answers it", async
   // The engine's own error, not a framed one: the module never returned.
   assert.throws(() => mdstruct.parseJson(tooDeep), (e) => !e.message.startsWith("mdstruct:"));
   assert.equal(mdstruct.parseJson("# A\n\nhello\n"), fresh.parseJson("# A\n\nhello\n"));
-});
-
-test("mdread.wasm reserves the CLI's 8 MiB stack", async () => {
-  assert.ok((await initialMemory("mdread")) >= 8 * 2 ** 20);
-});
-
-test("mdread: a trap leaves the next call as a fresh module answers it", async () => {
-  const mdread = await loadMdread(await wasm("mdread"));
-  const fresh = await loadMdread(await wasm("mdread"));
-  assert.throws(() => mdread.read(tooDeep, { address: "1" }), (e) => !e.message.startsWith("mdread:"));
-  assert.equal(mdread.read("# A\n\nhello\n"), fresh.read("# A\n\nhello\n"));
-});
-
-test("mdread: a string reads as its UTF-8 bytes do", async () => {
-  const mdread = await loadMdread(await wasm("mdread"));
-  const page = await readFile(new URL("../mdread/tests/fixtures/rich.md", import.meta.url), "utf8");
-  for (const address of [undefined, "1", "links"]) {
-    assert.equal(mdread.read(page, { address }), mdread.read(new TextEncoder().encode(page), { address }));
-  }
-});
-
-test("mdread: half a surrogate pair reads as U+FFFD, as it reaches the CLI through a pipe", async () => {
-  const mdread = await loadMdread(await wasm("mdread"));
-  const cut = "# A\n\n" + "\u{1F600}".slice(0, 1) + "\n";
-  assert.equal(mdread.read(cut, { address: "1" }), mdread.read("# A\n\n\uFFFD\n", { address: "1" }));
-});
-
-test("mdread: bytes that are not UTF-8 throw the CLI's message", async () => {
-  const mdread = await loadMdread(await wasm("mdread"));
-  assert.throws(
-    () => mdread.read(new Uint8Array([0x23, 0x20, 0x41, 0x0a, 0xff, 0x0a])),
-    { message: "mdread: stream did not contain valid UTF-8" },
-  );
-});
-
-test("mdread: Infinity and NaN throw instead of reading as omitted", async () => {
-  const mdread = await loadMdread(await wasm("mdread"));
-  for (const options of [{ threshold: Infinity }, { depth: NaN }, { depth: -Infinity }]) {
-    assert.throws(() => mdread.read("# A\n", { address: "1", ...options }), /^Error: mdread: invalid options: /);
-  }
-});
-
-test("mdread: null reads as omitted, and a bound past 32 bits reads as the CLI does", async () => {
-  const mdread = await loadMdread(await wasm("mdread"));
-  const page = `# A\n\n## Big\n\n${"word ".repeat(10_000)}\n`;
-  const all = mdread.read(page, { address: "1", threshold: 1e9 });
-  assert.notEqual(mdread.read(page, { address: "1" }), all, "the default folds Big");
-  assert.equal(mdread.read(page, { address: "1", full: null }), mdread.read(page, { address: "1" }));
-  for (const threshold of [2 ** 32, Number.MAX_SAFE_INTEGER]) {
-    assert.equal(mdread.read(page, { address: "1", threshold }), all);
-  }
 });

@@ -689,30 +689,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mdread"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "clap",
- "cli",
- "mdstruct",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
-name = "mdread-wasm"
-version = "0.3.0"
-dependencies = [
- "mdread",
- "serde",
- "serde_json",
- "wasm-abi",
-]
-
-[[package]]
 name = "mdsearch"
 version = "0.3.0"
 dependencies = [
