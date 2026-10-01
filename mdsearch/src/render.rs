@@ -86,7 +86,7 @@ fn ranked(
         .iter()
         .map(|d| (d.id.clone(), estimate_tokens(&d.body)))
         .collect();
-    let hits = Corpus::build(&docs)?.search(query, limit, scoring)?;
+    let hits = Corpus::build(docs)?.search(query, limit, scoring)?;
     Ok((hits, tokens))
 }
 

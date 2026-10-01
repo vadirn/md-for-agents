@@ -2,22 +2,21 @@
 //!
 //! The core knows nothing about files. A caller hands it [`Doc`] values, tunes
 //! the field weights through [`Scoring`], and reads back [`Hit`] values carrying
-//! its own identifiers. Callers with their own retrieval logic take
-//! [`Corpus::index`] and [`Corpus::fields`] and query Tantivy directly.
+//! its own identifiers.
 
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use anyhow::{Result, bail};
-use tantivy::collector::TopDocs;
-use tantivy::query::{BooleanQuery, BoostQuery, Occur, Query, TermQuery};
-use tantivy::schema::*;
-use tantivy::snippet::SnippetGenerator;
-use tantivy::{Index, IndexWriter, doc};
 
-use crate::analysis::{TOKENIZER, bilingual_analyzer, query_terms};
+use crate::analysis::{Analyzer, bilingual_analyzer};
 
-/// Least heap Tantivy accepts for one index writer.
-const WRITER_BUDGET: usize = 15_000_000;
+/// BM25 term saturation: how fast repeats of a term stop adding score.
+const K1: f32 = 1.2;
+/// BM25 length normalization: how much a long field is discounted.
+const B: f32 = 0.75;
+/// Longest snippet fragment, in bytes of the body.
+const SNIPPET_BYTES: usize = 150;
 
 /// One document to index.
 ///
@@ -53,16 +52,6 @@ impl Default for Scoring {
     }
 }
 
-/// Field handles for the schema, for a caller querying the index itself.
-/// `Field` is `Copy`, so these pass straight into a query parser or a collector.
-#[derive(Debug, Clone, Copy)]
-pub struct Fields {
-    pub id: Field,
-    pub title: Field,
-    pub description: Field,
-    pub body: Field,
-}
-
 /// A matching window of a document's body, with the spans that matched.
 ///
 /// Highlighting is the caller's to render, so the spans arrive as byte ranges
@@ -83,13 +72,47 @@ pub struct Hit {
     pub snippet: Snippet,
 }
 
+/// One field's inverted index.
+#[derive(Default)]
+struct Postings {
+    /// Each term's documents in ascending order, with the term's count in each.
+    terms: HashMap<String, Vec<(u32, u32)>>,
+    /// Each document's length in terms.
+    lengths: Vec<u32>,
+    /// All documents' lengths summed.
+    total: u64,
+}
+
+impl Postings {
+    fn add(&mut self, doc: u32, terms: Vec<String>) {
+        self.lengths.push(terms.len() as u32);
+        self.total += terms.len() as u64;
+        let mut counts: HashMap<String, u32> = HashMap::new();
+        for term in terms {
+            *counts.entry(term).or_default() += 1;
+        }
+        for (term, count) in counts {
+            self.terms.entry(term).or_default().push((doc, count));
+        }
+    }
+
+    fn doc_freq(&self, term: &str) -> usize {
+        self.terms.get(term).map_or(0, Vec::len)
+    }
+}
+
 /// An in-RAM BM25 index over a set of documents.
 ///
 /// The index lives as long as the `Corpus` and never touches disk, so no stale
 /// index can outlive the documents it was built from.
 pub struct Corpus {
-    index: Index,
-    fields: Fields,
+    ids: Vec<String>,
+    titles: Vec<String>,
+    bodies: Vec<String>,
+    title: Postings,
+    description: Postings,
+    body: Postings,
+    analyzer: Analyzer,
 }
 
 impl Corpus {
@@ -97,158 +120,206 @@ impl Corpus {
     ///
     /// Every text field is analyzed by the shared stemming chain. Only
     /// `description` goes unstored, because scoring reads it and no hit returns it.
-    pub fn build(docs: &[Doc]) -> Result<Corpus> {
-        let mut schema_builder = Schema::builder();
-        let stored_text = || {
-            TextOptions::default()
-                .set_indexing_options(
-                    TextFieldIndexing::default()
-                        .set_tokenizer(TOKENIZER)
-                        .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-                )
-                .set_stored()
+    pub fn build(docs: Vec<Doc>) -> Result<Corpus> {
+        let analyzer = bilingual_analyzer();
+        let mut corpus = Corpus {
+            ids: Vec::with_capacity(docs.len()),
+            titles: Vec::with_capacity(docs.len()),
+            bodies: Vec::with_capacity(docs.len()),
+            title: Postings::default(),
+            description: Postings::default(),
+            body: Postings::default(),
+            analyzer,
         };
-        let indexed_only = TextOptions::default().set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer(TOKENIZER)
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        );
-        let title = schema_builder.add_text_field("title", stored_text());
-        let description = schema_builder.add_text_field("description", indexed_only);
-        let body = schema_builder.add_text_field("body", stored_text());
-        let id = schema_builder.add_text_field("id", STRING | STORED);
-        let schema = schema_builder.build();
-
-        let index = Index::create_in_ram(schema);
-        index.tokenizers().register(TOKENIZER, bilingual_analyzer());
-
-        let total: usize = docs.iter().map(|d| d.body.len()).sum();
-        let mut writer: IndexWriter = index.writer(total.max(WRITER_BUDGET))?;
-        for document in docs {
-            writer.add_document(doc!(
-                title => document.title.as_str(),
-                description => document.description.as_str(),
-                body => document.body.as_str(),
-                id => document.id.as_str(),
-            ))?;
+        for (k, doc) in docs.into_iter().enumerate() {
+            let k = u32::try_from(k)?;
+            corpus.title.add(k, corpus.analyzer.terms(&doc.title));
+            corpus
+                .description
+                .add(k, corpus.analyzer.terms(&doc.description));
+            corpus.body.add(k, corpus.analyzer.terms(&doc.body));
+            corpus.ids.push(doc.id);
+            corpus.titles.push(doc.title);
+            corpus.bodies.push(doc.body);
         }
-        writer.commit()?;
-
-        Ok(Corpus {
-            index,
-            fields: Fields {
-                id,
-                title,
-                description,
-                body,
-            },
-        })
+        Ok(corpus)
     }
 
-    /// The Tantivy index, for a caller running its own query, collector, or
-    /// stored-field readback.
-    pub fn index(&self) -> &Index {
-        &self.index
-    }
-
-    /// The field handles of [`Corpus::index`].
-    pub fn fields(&self) -> Fields {
-        self.fields
+    /// How many documents the index holds.
+    pub fn num_docs(&self) -> usize {
+        self.ids.len()
     }
 
     /// Rank `query` over title, description, and body, returning at most `limit`
-    /// hits in descending score.
+    /// hits in descending score, each with the body window that matched best.
     ///
     /// `query` is free text, never a query language: it is analyzed into terms and
     /// looked up, so no character in it is reserved. A query holding no terms is an
     /// error, since an empty query would report "no matches" for what is really a
     /// malformed request.
     pub fn search(&self, query: &str, limit: usize, scoring: Scoring) -> Result<Vec<Hit>> {
-        let mut analyzer = self.index.tokenizer_for_field(self.fields.body)?;
-        let terms = query_terms(&mut analyzer, query);
+        let terms = self.analyzer.terms(query);
+        let weights = self.snippet_weights(&terms);
+        Ok(self
+            .top(&terms, query, limit, scoring)?
+            .into_iter()
+            .map(|(k, score)| Hit {
+                id: self.ids[k].clone(),
+                title: self.titles[k].clone(),
+                score,
+                snippet: self.snippet(&self.bodies[k], &weights),
+            })
+            .collect())
+    }
+
+    /// The best `limit` documents for `terms` with their scores, best first.
+    fn top(
+        &self,
+        terms: &[String],
+        query: &str,
+        limit: usize,
+        scoring: Scoring,
+    ) -> Result<Vec<(usize, f32)>> {
         if terms.is_empty() {
             bail!("query has no searchable terms: {:?}", query);
         }
-        if limit == 0 {
+        let docs = self.num_docs();
+        if limit == 0 || docs == 0 {
             return Ok(Vec::new());
         }
-
-        let searcher = self.index.reader()?.searcher();
-        let parsed = self.union_over_fields(&terms, scoring);
-
-        let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit).order_by_score())?;
-        if top_docs.is_empty() {
-            return Ok(Vec::new());
+        let mut scores = vec![0.0f32; docs];
+        let mut matched = vec![false; docs];
+        for (postings, weight) in [
+            (&self.title, scoring.title),
+            (&self.description, scoring.description),
+            (&self.body, 1.0),
+        ] {
+            self.score_field(postings, weight, terms, &mut scores, &mut matched);
         }
-
-        // The generator must come from the searcher and query that produced the hits.
-        let generator = SnippetGenerator::create(&searcher, &parsed, self.fields.body)?;
-
-        let mut hits = Vec::with_capacity(top_docs.len());
-        for (score, address) in top_docs {
-            let document: TantivyDocument = searcher.doc(address)?;
-            let stored = |field| {
-                document
-                    .get_first(field)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string()
-            };
-            let snippet = generator.snippet(&stored(self.fields.body));
-            hits.push(Hit {
-                id: stored(self.fields.id),
-                title: stored(self.fields.title),
-                score,
-                snippet: Snippet {
-                    text: snippet.fragment().to_string(),
-                    highlights: snippet.highlighted().to_vec(),
-                },
-            });
+        let mut ranked: Vec<usize> = (0..docs).filter(|&k| matched[k]).collect();
+        // Equal scores keep index order, so the ranking is deterministic.
+        let order = |a: &usize, b: &usize| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b));
+        // Only the best `limit` need sorting, so the rest are split off unsorted.
+        if ranked.len() > limit {
+            ranked.select_nth_unstable_by(limit, order);
+            ranked.truncate(limit);
         }
-        Ok(hits)
+        ranked.sort_by(order);
+        Ok(ranked.into_iter().map(|k| (k, scores[k])).collect())
     }
 
-    /// One `Should` clause per term per searched field, each weighted by its field.
+    /// Add each term's BM25 score in one field, scaled by the field's weight.
     ///
-    /// `Should` makes the clauses a union, which is what a bare list of words means
-    /// to a reader: every word contributes, none is required. A document matching
-    /// two of them outscores one matching a single word.
+    /// Every term counts on its own, repeats included, and a document matching
+    /// two terms outscores one matching a single term. That is what a bare list
+    /// of words means to a reader: every word contributes, none is required.
+    /// `importer's` contributes `importer` and `s` separately, and a document
+    /// holding either scores. Adjacency is a phrase search, and this tool does not
+    /// offer one.
     ///
-    /// The body carries no weight of its own because it anchors the scale the other
-    /// two are expressed against, as [`Scoring`] describes.
-    ///
-    /// Every term stands on its own, including the several a single written word can
-    /// yield: `importer's` contributes `importer` and `s` separately, and a document
-    /// holding either scores. Tantivy's query parser instead turned such a word into
-    /// an exact phrase requiring the two adjacent, which is why the same search wrote
-    /// two different scores depending on which apostrophe the user typed. Adjacency is
-    /// a phrase search, and this tool does not offer one.
-    fn union_over_fields(&self, terms: &[String], scoring: Scoring) -> Box<dyn Query> {
-        let weighted = [
-            (self.fields.title, scoring.title),
-            (self.fields.description, scoring.description),
-            (self.fields.body, 1.0),
-        ];
-        let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-        for (field, weight) in weighted {
-            for text in terms {
-                let term = Term::from_field_text(field, text);
-                // WithFreqs is what BM25 scores on; positions serve the snippet, not the term.
-                let leaf = TermQuery::new(term, IndexRecordOption::WithFreqs);
-                clauses.push((
-                    Occur::Should,
-                    Box::new(BoostQuery::new(Box::new(leaf), weight)),
-                ));
+    /// A zero-weight field still matches, so a document found only there ranks
+    /// with a score of zero rather than vanishing.
+    fn score_field(
+        &self,
+        postings: &Postings,
+        weight: f32,
+        terms: &[String],
+        scores: &mut [f32],
+        matched: &mut [bool],
+    ) {
+        let docs = self.num_docs() as f32;
+        let average = postings.total as f32 / docs;
+        for term in terms {
+            let Some(list) = postings.terms.get(term) else {
+                continue;
+            };
+            let df = list.len() as f32;
+            let idf = (1.0 + (docs - df + 0.5) / (df + 0.5)).ln();
+            let term_weight = idf * (1.0 + K1) * weight;
+            for &(doc, count) in list {
+                // Lengths are exact. Tantivy rounded them into 256 buckets, so scores
+                // differ slightly from the tantivy build and near-ties can reorder.
+                let length = postings.lengths[doc as usize] as f32;
+                let norm = K1 * (1.0 - B + B * length / average);
+                let count = count as f32;
+                scores[doc as usize] += term_weight * count / (count + norm);
+                matched[doc as usize] = true;
             }
         }
-        Box::new(BooleanQuery::new(clauses))
+    }
+
+    /// Each distinct query term the body holds, weighted by its rarity: a term in
+    /// fewer documents marks a window as more telling.
+    fn snippet_weights(&self, terms: &[String]) -> BTreeMap<String, f32> {
+        terms
+            .iter()
+            .filter_map(|term| {
+                let df = self.body.doc_freq(term);
+                (df > 0).then(|| (term.clone(), 1.0 / (1.0 + df as f32)))
+            })
+            .collect()
+    }
+
+    /// The window of `body` whose matched terms weigh most, earliest on a tie.
+    ///
+    /// Windows are cut greedily: a token that would carry a window past
+    /// [`SNIPPET_BYTES`] opens the next one. A body with no matched term has no
+    /// snippet.
+    fn snippet(&self, body: &str, weights: &BTreeMap<String, f32>) -> Snippet {
+        let mut best: Option<Window> = None;
+        let mut window = Window::at(0);
+        for token in self.analyzer.tokens(body) {
+            if token.span.end - window.start > SNIPPET_BYTES {
+                window.offer_to(&mut best);
+                window = Window::at(token.span.start);
+            }
+            window.end = token.span.end;
+            if let Some(weight) = weights.get(&token.text) {
+                window.score += weight;
+                window.highlights.push(token.span);
+            }
+        }
+        window.offer_to(&mut best);
+        best.map(|w| Snippet {
+            text: body[w.start..w.end].to_string(),
+            highlights: w
+                .highlights
+                .iter()
+                .map(|h| h.start - w.start..h.end - w.start)
+                .collect(),
+        })
+        .unwrap_or_default()
+    }
+}
+
+/// A candidate snippet: a byte range of the body and the matches inside it.
+struct Window {
+    start: usize,
+    end: usize,
+    score: f32,
+    highlights: Vec<Range<usize>>,
+}
+
+impl Window {
+    fn at(start: usize) -> Window {
+        Window {
+            start,
+            end: start,
+            score: 0.0,
+            highlights: Vec::new(),
+        }
+    }
+
+    /// Replace `best` with this window when it matched and outweighs it.
+    fn offer_to(self, best: &mut Option<Window>) {
+        if self.score > 0.0 && best.as_ref().is_none_or(|b| self.score > b.score) {
+            *best = Some(self);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tantivy::query::QueryParser;
-
     use super::*;
 
     fn docs() -> Vec<Doc> {
@@ -274,7 +345,7 @@ mod tests {
 
     #[test]
     fn ranks_the_matching_document_first() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let hits = corpus
             .search("term frequency", 10, Scoring::default())
             .unwrap();
@@ -283,7 +354,7 @@ mod tests {
 
     #[test]
     fn the_description_is_scored_and_the_id_is_not() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         assert_eq!(
             ids(&corpus.search("ranking", 10, Scoring::default()).unwrap()),
             vec!["retrieval"]
@@ -301,7 +372,7 @@ mod tests {
 
     #[test]
     fn scoring_weights_are_the_callers_to_set() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let default = corpus.search("frequency", 10, Scoring::default()).unwrap();
         let flat = corpus
             .search(
@@ -324,7 +395,7 @@ mod tests {
 
     #[test]
     fn the_snippet_carries_spans_not_markup() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let hits = corpus.search("tomatoes", 10, Scoring::default()).unwrap();
         let snippet = &hits[0].snippet;
         assert!(snippet.text.to_lowercase().contains("tomatoes"));
@@ -334,7 +405,7 @@ mod tests {
 
     #[test]
     fn limit_truncates_and_zero_returns_nothing() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         assert_eq!(corpus.search("a", 1, Scoring::default()).unwrap().len(), 1);
         assert!(
             corpus
@@ -346,7 +417,7 @@ mod tests {
 
     #[test]
     fn a_query_of_only_punctuation_is_an_error() {
-        let corpus = Corpus::build(&docs()).unwrap();
+        let corpus = Corpus::build(docs()).unwrap();
         let err = corpus.search("***", 10, Scoring::default()).unwrap_err();
         assert!(
             err.to_string().contains("no searchable terms"),
@@ -357,7 +428,7 @@ mod tests {
 
     #[test]
     fn an_apostrophe_searches_the_words_around_it() {
-        let corpus = Corpus::build(&[Doc {
+        let corpus = Corpus::build(vec![Doc {
             id: "importing".into(),
             title: "Importing".into(),
             description: String::new(),
@@ -372,8 +443,8 @@ mod tests {
 
     #[test]
     fn every_query_metacharacter_is_ordinary_text() {
-        let corpus = Corpus::build(&docs()).unwrap();
-        // Each spelling below is syntax to Tantivy's query grammar: a phrase quote,
+        let corpus = Corpus::build(docs()).unwrap();
+        // Each spelling below is syntax in a Lucene-style query grammar: a phrase quote,
         // a field selector, negation, a required term, a boost, slop, a wildcard, a
         // group. Here every one of them is a word with punctuation around it.
         for query in [
@@ -399,7 +470,7 @@ mod tests {
 
     #[test]
     fn an_empty_corpus_answers_without_matching() {
-        let corpus = Corpus::build(&[]).unwrap();
+        let corpus = Corpus::build(Vec::new()).unwrap();
         assert!(
             corpus
                 .search("alpha", 10, Scoring::default())
@@ -409,15 +480,94 @@ mod tests {
     }
 
     #[test]
-    fn the_index_and_fields_are_reachable_for_a_caller_query() {
-        let corpus = Corpus::build(&docs()).unwrap();
-        let searcher = corpus.index().reader().unwrap().searcher();
-        assert_eq!(searcher.num_docs(), 2);
-        let parser = QueryParser::for_index(corpus.index(), vec![corpus.fields().body]);
-        let parsed = parser.parse_query("tomatoes").unwrap();
-        let found = searcher
-            .search(&parsed, &TopDocs::with_limit(10).order_by_score())
+    fn a_zero_weight_field_still_matches_at_score_zero() {
+        let corpus = Corpus::build(docs()).unwrap();
+        // "ranking" sits only in the retrieval description.
+        let hits = corpus
+            .search(
+                "ranking",
+                10,
+                Scoring {
+                    title: 1.0,
+                    description: 0.0,
+                },
+            )
             .unwrap();
-        assert_eq!(found.len(), 1);
+        assert_eq!(ids(&hits), ["retrieval"]);
+        assert_eq!(hits[0].score, 0.0);
+    }
+
+    #[test]
+    fn scores_follow_bm25() {
+        // One term in one of two single-word bodies: idf = ln(1 + 1.5 / 1.5) = ln 2,
+        // and a body at the average length scores idf * (k1 + 1) * 1 / (1 + k1).
+        let corpus = Corpus::build(vec![
+            Doc {
+                id: "a".into(),
+                body: "alpha".into(),
+                ..Doc::default()
+            },
+            Doc {
+                id: "b".into(),
+                body: "beta".into(),
+                ..Doc::default()
+            },
+        ])
+        .unwrap();
+        let hits = corpus.search("alpha", 10, Scoring::default()).unwrap();
+        assert_eq!(ids(&hits), ["a"]);
+        assert!(
+            (hits[0].score - 2f32.ln()).abs() < 1e-6,
+            "got {}",
+            hits[0].score
+        );
+    }
+
+    #[test]
+    fn a_longer_body_scores_lower_for_the_same_count() {
+        // Bodies of 1, 3 and 1 terms average 5/3. Each length divides by that
+        // average, and B weighs the quotient against a flat 1 - B.
+        let body = |id: &str, text: &str| Doc {
+            id: id.into(),
+            body: text.into(),
+            ..Doc::default()
+        };
+        let corpus = Corpus::build(vec![
+            body("short", "alpha"),
+            body("long", "alpha beta gamma"),
+            body("other", "delta"),
+        ])
+        .unwrap();
+        let hits = corpus.search("alpha", 10, Scoring::default()).unwrap();
+        assert_eq!(ids(&hits), ["short", "long"]);
+        let idf = 1.6f32.ln();
+        let short = idf * 2.2 / (1.0 + 1.2 * (0.25 + 0.75 * 0.6));
+        let long = idf * 2.2 / (1.0 + 1.2 * (0.25 + 0.75 * 1.8));
+        assert!(
+            (hits[0].score - short).abs() < 1e-5,
+            "got {}",
+            hits[0].score
+        );
+        assert!((hits[1].score - long).abs() < 1e-5, "got {}", hits[1].score);
+    }
+
+    #[test]
+    fn a_snippet_is_the_heaviest_window_and_the_earliest_on_a_tie() {
+        let filler = "word ".repeat(40);
+        let body = format!("rare first. {filler} rare second.");
+        let corpus = Corpus::build(vec![Doc {
+            id: "x".into(),
+            body: body.clone(),
+            ..Doc::default()
+        }])
+        .unwrap();
+        let snippet = &corpus.search("rare", 10, Scoring::default()).unwrap()[0].snippet;
+        assert!(
+            snippet.text.starts_with("rare first"),
+            "got {:?}",
+            snippet.text
+        );
+        assert!(snippet.text.len() <= SNIPPET_BYTES);
+        assert_eq!(&snippet.text[snippet.highlights[0].clone()], "rare");
     }
 }
