@@ -125,9 +125,12 @@ pub fn scan<P: AsRef<Path>>(roots: &[P], walk: Walk) -> Result<Vec<MdFile>> {
         }
         // Overlapping roots reach one file twice, perhaps spelled two ways, as
         // in `docs/a.md` and `/home/me/docs/a.md`. One canonical path names both.
-        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        if !seen.insert(canonical) {
-            continue;
+        // One root reaches each file once, so it skips the check.
+        if roots.len() > 1 {
+            let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            if !seen.insert(canonical) {
+                continue;
+            }
         }
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
