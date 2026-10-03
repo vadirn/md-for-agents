@@ -38,8 +38,9 @@ built in RAM for the one run, so there is nothing to reindex after an edit."
 struct Cli {
     /// Query terms
     query: String,
-    /// Folders to search as one index (default: the current directory)
-    #[arg(value_name = "PATH")]
+    /// Folders to search as one index
+    // `.` rather than the absolute current directory, so paths print relative.
+    #[arg(value_name = "PATH", default_value = ".")]
     paths: Vec<PathBuf>,
     /// Hits to report
     #[arg(short, long, default_value_t = DEFAULT_LIMIT)]
@@ -64,17 +65,10 @@ fn main() {
 }
 
 fn run(cli: &Cli) -> Result<()> {
-    // `.` rather than the absolute current directory, so paths print relative.
-    let default = [PathBuf::from(".")];
-    let roots = if cli.paths.is_empty() {
-        &default[..]
-    } else {
-        &cli.paths[..]
-    };
     let walk = Walk {
         ignore_files: !cli.no_ignore,
         hidden: cli.hidden,
         custom_ignore: Some(IGNORE_FILE.to_string()),
     };
-    mdsearch::run(&cli.query, roots, cli.limit, cli.format, walk)
+    mdsearch::run(&cli.query, &cli.paths, cli.limit, cli.format, walk)
 }
