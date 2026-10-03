@@ -12,7 +12,7 @@ Every tool writes data to stdout and diagnostics to stderr, so a pipe into `jq` 
 | ---------- | ------------ |
 | `mdstruct` | Parses Markdown to NDJSON: one JSON document per line, one line per input. |
 | `mdformat` | Prints CommonMark from that same parse, scoped to whitespace and tables. |
-| `mdsearch` | Ranks a folder's Markdown by BM25, over an index built in RAM for one run. |
+| `mdsearch` | Ranks the Markdown in one or more folders by BM25, over an index built in RAM for one run. |
 
 ## Quick start
 
@@ -109,7 +109,7 @@ Splicing over one block's range then neither drops nor duplicates the rest of th
 
 ## mdsearch
 
-`mdsearch` ranks the Markdown files in a folder against a query, best match first. Scoring is BM25 over these fields:
+`mdsearch` ranks the Markdown files in one or more folders against a query, best match first. Scoring is BM25 over these fields:
 
 - the file name
 - the frontmatter `description:`
@@ -119,10 +119,13 @@ Splicing over one block's range then neither drops nor duplicates the rest of th
 mdsearch "retry backoff" ./docs
 mdsearch "importer's work" ./docs --limit 3
 mdsearch "план миграции" ./docs --format json
+mdsearch "halt recovery runbook" docs deploy
 ```
 
 Worth knowing before you use it:
 
+- Several folders build one index, so their scores compare. Separate runs would not compare, because a word weighs by how rare it is in the folders searched.
+- Each result's path starts with its folder as given, less a leading `./`, so it opens from the current directory. A file under two given folders counts once.
 - Terms are stemmed in English and Russian, so a query matches words sharing a root with it.
 - Query punctuation reads as whitespace. A phrase searches for its words, and no character is query syntax.
 - The walk obeys `.gitignore`, `.ignore`, and `.mdsearchignore`, in a plain folder as much as in a git repository. Pass `--no-ignore` to search anyway.
@@ -137,7 +140,7 @@ mdstruct/       the parsing core; mdformat and mdstruct-wasm depend on it
 mdstruct-wasm/  mdstruct as a WebAssembly module, with its JavaScript loader
 wasm-abi/       the host edge the WebAssembly module uses: alloc, dealloc, and the frame
 mdformat/       block-level passthrough printer
-mdsearch/       BM25 search over a folder
+mdsearch/       BM25 search over one or more folders
 ```
 
 `cli` and `wasm-abi` are libraries with no binary, and `mdstruct-wasm` ships a WebAssembly module instead of one. Every other crate ships a binary. The `mdstruct` library builds without clap when its `cli` feature is off, which is how its dependents take it.

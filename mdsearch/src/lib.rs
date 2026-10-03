@@ -6,9 +6,10 @@
 //! or its own exclusion rules reuses it whole.
 //!
 //! [`scan`] and [`run`] are the Markdown half the `mdsearch` binary is built
-//! from: walk a folder, turn each file into a `Doc` by its name, its frontmatter
-//! `description:`, and the prose after that block, then print the hits. The
-//! binary holds the defaults; nothing here presumes them.
+//! from: walk one or more folders as one corpus, turn each file into a `Doc` by
+//! its name, its frontmatter `description:`, and the prose after that block,
+//! then print the hits. The binary holds the defaults; nothing here presumes
+//! them.
 
 pub mod analysis;
 mod corpus;
@@ -21,4 +22,4 @@ mod scan;
 pub use cli::{TextJson, estimate_tokens};
 pub use corpus::{Corpus, Doc, Hit, Scoring, Snippet};
 pub use render::{SearchOutput, SearchResult, run, search};
-pub use scan::{MARKDOWN_EXTENSIONS, MdFile, Walk, scan};
+pub use scan::{MARKDOWN_EXTENSIONS, MdFile, NotAFolder, Walk, scan};

@@ -1,4 +1,4 @@
-//! The command-line half: walk a folder, search it, and print the hits.
+//! The command-line half: walk the folders, search them, and print the hits.
 //!
 //! Everything here is presentation over the core — highlight markers, a token
 //! estimate, and the JSON envelope. A library caller that wants none of it uses
@@ -20,7 +20,8 @@ use crate::scan::{self, Walk};
 /// One result as the CLI reports it.
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
-    /// Path relative to the searched folder.
+    /// Path joined to the folder that reached it, as the caller gave it, less a
+    /// leading `./`.
     pub path: String,
     /// File name without its extension.
     pub title: String,
@@ -69,18 +70,19 @@ fn mark(text: &str, highlights: &[Range<usize>]) -> String {
     out
 }
 
-/// Walk `root`, index what the walk admits, and rank `query` against it.
+/// Walk `roots`, index what the walk admits as one corpus, and rank `query`
+/// against it.
 ///
 /// Returns the hits and the token estimate of each hit's body, which the core
 /// does not carry because a token is a presentation unit.
-fn ranked(
+fn ranked<P: AsRef<Path>>(
     query: &str,
-    root: &Path,
+    roots: &[P],
     limit: usize,
     walk: Walk,
     scoring: Scoring,
 ) -> Result<(Vec<Hit>, HashMap<String, usize>)> {
-    let files = scan::scan(root, walk)?;
+    let files = scan::scan(roots, walk)?;
     let docs: Vec<_> = files.iter().map(|f| f.to_doc()).collect();
     let tokens = docs
         .iter()
@@ -90,9 +92,14 @@ fn ranked(
     Ok((hits, tokens))
 }
 
-/// Search the Markdown under `root` and return the results the CLI prints.
-pub fn search(query: &str, root: &Path, limit: usize, walk: Walk) -> Result<Vec<SearchResult>> {
-    let (hits, tokens) = ranked(query, root, limit, walk, Scoring::default())?;
+/// Search the Markdown under `roots` and return the results the CLI prints.
+pub fn search<P: AsRef<Path>>(
+    query: &str,
+    roots: &[P],
+    limit: usize,
+    walk: Walk,
+) -> Result<Vec<SearchResult>> {
+    let (hits, tokens) = ranked(query, roots, limit, walk, Scoring::default())?;
     Ok(hits
         .into_iter()
         .map(|hit| SearchResult {
@@ -105,13 +112,19 @@ pub fn search(query: &str, root: &Path, limit: usize, walk: Walk) -> Result<Vec<
         .collect())
 }
 
-/// Search the Markdown under `root` and print the results in `format`.
+/// Search the Markdown under `roots` and print the results in `format`.
 ///
 /// JSON always prints an envelope, empty results included. Text prints nothing
 /// when nothing matched, the way a line-matching search does.
-pub fn run(query: &str, root: &Path, limit: usize, format: TextJson, walk: Walk) -> Result<()> {
+pub fn run<P: AsRef<Path>>(
+    query: &str,
+    roots: &[P],
+    limit: usize,
+    format: TextJson,
+    walk: Walk,
+) -> Result<()> {
     if format == TextJson::Json {
-        let results = search(query, root, limit, walk)?;
+        let results = search(query, roots, limit, walk)?;
         let output = SearchOutput {
             query: query.to_string(),
             count: results.len(),
@@ -122,7 +135,7 @@ pub fn run(query: &str, root: &Path, limit: usize, format: TextJson, walk: Walk)
         return Ok(());
     }
 
-    let (hits, tokens) = ranked(query, root, limit, walk, Scoring::default())?;
+    let (hits, tokens) = ranked(query, roots, limit, walk, Scoring::default())?;
     with_stdout(|out| {
         for hit in &hits {
             let count = tokens.get(&hit.id).copied().unwrap_or(0);
