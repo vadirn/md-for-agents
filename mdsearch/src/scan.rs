@@ -327,6 +327,44 @@ mod tests {
     }
 
     #[test]
+    fn each_root_obeys_its_own_exclusion_files_and_the_flags() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "docs/.gitignore", "skip.md\n");
+        // The second root joins the walk through `add`, so its custom file counts.
+        write(tmp.path(), "deploy/.customignore", "skip.md\n");
+        for root in ["docs", "deploy"] {
+            write(tmp.path(), &format!("{root}/keep.md"), "a");
+            write(tmp.path(), &format!("{root}/skip.md"), "b");
+            write(tmp.path(), &format!("{root}/.hidden/note.md"), "c");
+        }
+        let roots = [tmp.path().join("docs"), tmp.path().join("deploy")];
+        let walk = Walk {
+            custom_ignore: Some(".customignore".into()),
+            ..Walk::default()
+        };
+        assert_eq!(
+            names(tmp.path(), &scan(&roots, walk.clone()).unwrap()),
+            vec!["deploy/keep.md", "docs/keep.md"]
+        );
+        let everything = Walk {
+            ignore_files: false,
+            hidden: true,
+            ..walk
+        };
+        assert_eq!(
+            names(tmp.path(), &scan(&roots, everything).unwrap()),
+            vec![
+                "deploy/.hidden/note.md",
+                "deploy/keep.md",
+                "deploy/skip.md",
+                "docs/.hidden/note.md",
+                "docs/keep.md",
+                "docs/skip.md",
+            ]
+        );
+    }
+
+    #[test]
     fn a_missing_second_root_is_an_error_naming_it() {
         let tmp = TempDir::new().unwrap();
         write(tmp.path(), "docs/a.md", "a");
