@@ -116,3 +116,22 @@ fn an_unquoted_query_hints_at_quoting() {
     assert!(stderr.contains("not a folder: halt"), "got: {}", stderr);
     assert!(stderr.contains("quote a query"), "got: {}", stderr);
 }
+
+#[test]
+fn the_quoting_hint_stays_off_where_quoting_is_not_the_cause() {
+    let tmp = folders();
+    // The query is already quoted, so the folder is mistyped.
+    let (code, _, stderr) = run(tmp.path(), &["halt recovery", "dosc"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("not a folder: dosc"), "got: {}", stderr);
+    assert!(!stderr.contains("quote"), "got: {}", stderr);
+    // The name is an existing file, so no query word spilled into it.
+    let (code, _, stderr) = run(&tmp.path().join("deploy"), &["recovery", "README.md"]);
+    assert_eq!(code, 1);
+    assert!(
+        stderr.contains("not a folder: README.md"),
+        "got: {}",
+        stderr
+    );
+    assert!(!stderr.contains("quote"), "got: {}", stderr);
+}

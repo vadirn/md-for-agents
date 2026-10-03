@@ -1,7 +1,8 @@
 //! The file walk: which Markdown files reach the index.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::fmt;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use ignore::WalkBuilder;
@@ -68,6 +69,19 @@ fn is_markdown(path: &Path) -> bool {
         .is_some_and(|e| MARKDOWN_EXTENSIONS.contains(&e.as_str()))
 }
 
+/// The error [`scan`] returns for a root that is not a folder, naming the root
+/// as the caller gave it, so a caller can explain the miss in its own terms.
+#[derive(Debug)]
+pub struct NotAFolder(pub PathBuf);
+
+impl fmt::Display for NotAFolder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "not a folder: {}", self.0.display())
+    }
+}
+
+impl std::error::Error for NotAFolder {}
+
 /// Walk every root and read each Markdown file the options admit, in path order.
 ///
 /// The roots feed one list, so a caller indexes them as one corpus. Each root
@@ -84,7 +98,7 @@ pub fn scan<P: AsRef<Path>>(roots: &[P], walk: Walk) -> Result<Vec<MdFile>> {
     for root in roots {
         let root = root.as_ref();
         if !root.is_dir() {
-            bail!("not a folder: {}", root.display());
+            return Err(NotAFolder(root.to_path_buf()).into());
         }
     }
 

@@ -22,4 +22,4 @@ mod scan;
 pub use cli::{TextJson, estimate_tokens};
 pub use corpus::{Corpus, Doc, Hit, Scoring, Snippet};
 pub use render::{SearchOutput, SearchResult, run, search};
-pub use scan::{MARKDOWN_EXTENSIONS, MdFile, Walk, scan};
+pub use scan::{MARKDOWN_EXTENSIONS, MdFile, NotAFolder, Walk, scan};

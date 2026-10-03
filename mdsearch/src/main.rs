@@ -4,12 +4,12 @@
 //! result count, and the field weights that `mdsearch` ships with. The crate's
 //! library API holds none of these, so another caller sets its own.
 
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 
-use mdsearch::{TextJson, Walk};
+use mdsearch::{NotAFolder, TextJson, Walk};
 
 /// Exclusion file this CLI reads alongside `.gitignore` and `.ignore`, for rules
 /// that belong to the search rather than to the repository.
@@ -59,20 +59,29 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     if let Err(e) = run(&cli) {
-        eprintln!("{}", e);
+        match e.downcast_ref::<NotAFolder>() {
+            Some(NotAFolder(path)) if looks_like_query_word(&cli.query, path) => {
+                eprintln!("{} (quote a query of several words)", e)
+            }
+            _ => eprintln!("{}", e),
+        }
         std::process::exit(1);
     }
 }
 
+/// Whether a missing folder looks like a stray word of an unquoted query: the
+/// query is one word, and the folder is a bare name that names nothing.
+fn looks_like_query_word(query: &str, path: &Path) -> bool {
+    let mut parts = path.components();
+    !query.contains(char::is_whitespace)
+        && matches!(
+            (parts.next(), parts.next()),
+            (Some(Component::Normal(_)), None)
+        )
+        && !path.exists()
+}
+
 fn run(cli: &Cli) -> Result<()> {
-    // An unquoted query spills its later words into the folder list, so a
-    // missing folder hints at quoting before the walk reports it bare.
-    if let Some(path) = cli.paths.iter().find(|p| !p.is_dir()) {
-        bail!(
-            "not a folder: {} (quote a query of several words)",
-            path.display()
-        );
-    }
     let walk = Walk {
         ignore_files: !cli.no_ignore,
         hidden: cli.hidden,
