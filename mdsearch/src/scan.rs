@@ -82,6 +82,21 @@ impl fmt::Display for NotAFolder {
 
 impl std::error::Error for NotAFolder {}
 
+/// What makes two paths one file: its device and inode, so a hard link counts
+/// as the file it links.
+#[cfg(unix)]
+fn file_identity(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+}
+
+/// What makes two paths one file where inodes are out of reach: the canonical
+/// path, which still tells hard links apart.
+#[cfg(not(unix))]
+fn file_identity(path: &Path) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok()
+}
+
 /// Walk every root and read each Markdown file the options admit, in path order.
 ///
 /// The roots feed one list, so a caller indexes them as one corpus. Each root
@@ -138,13 +153,10 @@ pub fn scan<P: AsRef<Path>>(roots: &[P], walk: Walk) -> Result<Vec<MdFile>> {
             continue;
         }
         // Overlapping roots reach one file twice, perhaps spelled two ways, as
-        // in `docs/a.md` and `/home/me/docs/a.md`. One canonical path names both.
-        // One root reaches each file once, so it skips the check.
-        if roots.len() > 1 {
-            let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            if !seen.insert(canonical) {
-                continue;
-            }
+        // in `docs/a.md` and `/home/me/docs/a.md`. One identity names both.
+        // One root reaches each file once, so a single root skips the check.
+        if roots.len() > 1 && file_identity(path).is_some_and(|id| !seen.insert(id)) {
+            continue;
         }
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
@@ -323,6 +335,18 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         write(tmp.path(), "docs/a.md", "a");
         let roots = [tmp.path().join("docs"), tmp.path().join("docs/../docs")];
+        let files = scan(&roots, Walk::default()).unwrap();
+        assert_eq!(names(tmp.path(), &files), vec!["docs/a.md"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_hard_link_under_a_second_root_counts_once() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "docs/a.md", "a");
+        fs::create_dir_all(tmp.path().join("deploy")).unwrap();
+        fs::hard_link(tmp.path().join("docs/a.md"), tmp.path().join("deploy/a.md")).unwrap();
+        let roots = [tmp.path().join("docs"), tmp.path().join("deploy")];
         let files = scan(&roots, Walk::default()).unwrap();
         assert_eq!(names(tmp.path(), &files), vec!["docs/a.md"]);
     }
