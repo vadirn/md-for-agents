@@ -2,17 +2,13 @@
 //! each result names its file. These run the binary, because the default
 //! folder is the working directory, which one test process shares.
 
-use std::fs;
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
+use common::{two_folders, write};
 use tempfile::TempDir;
-
-fn write(dir: &Path, rel: &str, content: &str) {
-    let path = dir.join(rel);
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, content).unwrap();
-}
 
 /// Run `mdsearch` from `cwd` and return its exit code, stdout, and stderr.
 fn run(cwd: &Path, args: &[&str]) -> (i32, String, String) {
@@ -41,17 +37,7 @@ fn json_paths(stdout: &str) -> Vec<String> {
 
 /// `docs` and `deploy` side by side, with a third folder no run names.
 fn folders() -> TempDir {
-    let tmp = TempDir::new().unwrap();
-    write(
-        tmp.path(),
-        "docs/sync/recovery.md",
-        "Halt the sender, then clear the halt for recovery.\n",
-    );
-    write(
-        tmp.path(),
-        "deploy/README.md",
-        "Runbook: halt traffic, restore the snapshot, confirm recovery.\n",
-    );
+    let tmp = two_folders();
     write(tmp.path(), "other/halt.md", "Halt recovery, unrelated.\n");
     tmp
 }

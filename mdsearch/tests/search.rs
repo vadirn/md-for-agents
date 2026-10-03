@@ -1,19 +1,15 @@
 //! End-to-end search over a temporary folder: ranking, exclusion, and output.
 
-use std::fs;
+mod common;
+
 use std::path::Path;
 
+use common::{two_folders, write};
 use mdsearch::{TextJson, Walk};
 use tempfile::TempDir;
 
 /// Result count these tests ask for; the binary has its own default.
 const DEFAULT_LIMIT: usize = 10;
-
-fn write(dir: &Path, rel: &str, content: &str) {
-    let path = dir.join(rel);
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, content).unwrap();
-}
 
 /// A folder holding one file about retrieval and one about gardening.
 fn corpus() -> TempDir {
@@ -210,37 +206,6 @@ fn a_missing_folder_is_an_error() {
     )
     .unwrap_err();
     assert!(err.to_string().contains("not a folder"), "got: {}", err);
-}
-
-/// Two folders whose parent holds nothing else: `docs` and `deploy`.
-fn two_folders() -> TempDir {
-    let tmp = TempDir::new().unwrap();
-    write(
-        tmp.path(),
-        "docs/sync/recovery.md",
-        "Halt the sender, then clear the halt for recovery.\n",
-    );
-    write(
-        tmp.path(),
-        "docs/sync/queue.md",
-        "The queue drains on restart.\n",
-    );
-    write(
-        tmp.path(),
-        "docs/style.md",
-        "Headings take sentence case.\n",
-    );
-    write(
-        tmp.path(),
-        "deploy/README.md",
-        "Runbook: halt traffic, restore the snapshot, confirm recovery.\n",
-    );
-    write(
-        tmp.path(),
-        "deploy/notes.md",
-        "Clear the cache after a deploy.\n",
-    );
-    tmp
 }
 
 fn scores(hits: &[mdsearch::SearchResult]) -> Vec<(String, f32)> {
