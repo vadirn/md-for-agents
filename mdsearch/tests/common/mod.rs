@@ -1,5 +1,8 @@
 //! Helpers the library and CLI tests share, so both assert on one corpus.
 
+// Each test crate compiles its own copy, and one need not use every helper.
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::Path;
 
