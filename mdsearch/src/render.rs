@@ -20,7 +20,8 @@ use crate::scan::{self, Walk};
 /// One result as the CLI reports it.
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
-    /// Path joined to the folder that reached it, as the caller gave it.
+    /// Path joined to the folder that reached it, as the caller gave it, less a
+    /// leading `./`.
     pub path: String,
     /// File name without its extension.
     pub title: String,

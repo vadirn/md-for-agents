@@ -125,7 +125,7 @@ mdsearch "halt recovery runbook" docs deploy
 Worth knowing before you use it:
 
 - Several folders build one index, so their scores compare. Separate runs would not compare, because a word weighs by how rare it is in the folders searched.
-- Each result's path starts with its folder as given, so it opens from the current directory. A file under two given folders counts once.
+- Each result's path starts with its folder as given, less a leading `./`, so it opens from the current directory. A file under two given folders counts once.
 - Terms are stemmed in English and Russian, so a query matches words sharing a root with it.
 - Query punctuation reads as whitespace. A phrase searches for its words, and no character is query syntax.
 - The walk obeys `.gitignore`, `.ignore`, and `.mdsearchignore`, in a plain folder as much as in a git repository. Pass `--no-ignore` to search anyway.

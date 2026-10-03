@@ -29,8 +29,8 @@ and the prose after that block. Terms are stemmed in English and Russian, so a q
 matches the words it shares a root with. Query punctuation is read as whitespace, so \
 a phrase searches for its words.\n\n\
 Several folders build one index, so their scores compare: a word's rarity counts \
-across all of them. Each result's path starts with its folder as given, so it opens \
-from the current directory. A file under two given folders counts once.\n\n\
+across all of them. Each result's path starts with its folder as given, less a leading \
+`./`, so it opens from the current directory. A file under two given folders counts once.\n\n\
 The walk obeys exclusion files — `.gitignore`, `.ignore`, and `.mdsearchignore` — \
 in a plain folder as much as in a git repository, and skips dot-files. The index is \
 built in RAM for the one run, so there is nothing to reindex after an edit."
