@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "BM25 search over the Markdown files in a folder: an in-RAM inverted index, bilingual stemming, and gitignore-style exclusion files."
+description = "BM25 search over the Markdown files in one or more folders: an in-RAM inverted index, bilingual stemming, and gitignore-style exclusion files."
 
 [[bin]]
 name = "mdsearch"

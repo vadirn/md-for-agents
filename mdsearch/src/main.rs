@@ -1,4 +1,4 @@
-//! `mdsearch` CLI — rank the Markdown files in a folder against a query.
+//! `mdsearch` CLI — rank the Markdown files in one or more folders against a query.
 //!
 //! This binary is the preconfigured half: it names the exclusion file, the
 //! result count, and the field weights that `mdsearch` ships with. The crate's
@@ -22,12 +22,15 @@ const DEFAULT_LIMIT: usize = 10;
 #[command(
     name = "mdsearch",
     version,
-    about = "BM25 search over the Markdown files in a folder",
-    long_about = "Rank the Markdown files in a folder against a query, best match first.\n\n\
+    about = "BM25 search over the Markdown files in one or more folders",
+    long_about = "Rank the Markdown files in one or more folders against a query, best match first.\n\n\
 Scoring is BM25 over three fields: the file name, the frontmatter `description:`, \
 and the prose after that block. Terms are stemmed in English and Russian, so a query \
 matches the words it shares a root with. Query punctuation is read as whitespace, so \
 a phrase searches for its words.\n\n\
+Several folders build one index, so their scores compare: a word's rarity counts \
+across all of them. Each result's path starts with its folder as given, so it opens \
+from the current directory. A file under two given folders counts once.\n\n\
 The walk obeys exclusion files — `.gitignore`, `.ignore`, and `.mdsearchignore` — \
 in a plain folder as much as in a git repository, and skips dot-files. The index is \
 built in RAM for the one run, so there is nothing to reindex after an edit."
@@ -35,8 +38,9 @@ built in RAM for the one run, so there is nothing to reindex after an edit."
 struct Cli {
     /// Query terms
     query: String,
-    /// Folder to search (default: the current directory)
-    path: Option<PathBuf>,
+    /// Folders to search as one index (default: the current directory)
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
     /// Hits to report
     #[arg(short, long, default_value_t = DEFAULT_LIMIT)]
     limit: usize,
@@ -60,14 +64,17 @@ fn main() {
 }
 
 fn run(cli: &Cli) -> Result<()> {
-    let root = match &cli.path {
-        Some(path) => path.clone(),
-        None => std::env::current_dir()?,
+    // `.` rather than the absolute current directory, so paths print relative.
+    let default = [PathBuf::from(".")];
+    let roots = if cli.paths.is_empty() {
+        &default[..]
+    } else {
+        &cli.paths[..]
     };
     let walk = Walk {
         ignore_files: !cli.no_ignore,
         hidden: cli.hidden,
         custom_ignore: Some(IGNORE_FILE.to_string()),
     };
-    mdsearch::run(&cli.query, &root, cli.limit, cli.format, walk)
+    mdsearch::run(&cli.query, roots, cli.limit, cli.format, walk)
 }
