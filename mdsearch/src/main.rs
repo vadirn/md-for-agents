@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 
 use mdsearch::{TextJson, Walk};
@@ -65,6 +65,14 @@ fn main() {
 }
 
 fn run(cli: &Cli) -> Result<()> {
+    // An unquoted query spills its later words into the folder list, so a
+    // missing folder hints at quoting before the walk reports it bare.
+    if let Some(path) = cli.paths.iter().find(|p| !p.is_dir()) {
+        bail!(
+            "not a folder: {} (quote a query of several words)",
+            path.display()
+        );
+    }
     let walk = Walk {
         ignore_files: !cli.no_ignore,
         hidden: cli.hidden,

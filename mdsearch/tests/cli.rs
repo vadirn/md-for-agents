@@ -106,3 +106,13 @@ fn a_missing_second_folder_fails_naming_it() {
     assert!(stdout.is_empty(), "got: {}", stdout);
     assert!(stderr.contains("not a folder: absent"), "got: {}", stderr);
 }
+
+#[test]
+fn an_unquoted_query_hints_at_quoting() {
+    let tmp = folders();
+    // The later words land in the folder list, where no such folder exists.
+    let (code, _, stderr) = run(tmp.path(), &["operator", "halt", "recovery"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("not a folder: halt"), "got: {}", stderr);
+    assert!(stderr.contains("quote a query"), "got: {}", stderr);
+}
